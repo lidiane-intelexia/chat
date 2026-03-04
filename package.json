@@ -1,0 +1,31 @@
+﻿{
+  "name": "chat-report-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "dotenv": "latest",
+    "express": "latest",
+    "fastest-levenshtein": "latest",
+    "googleapis": "latest",
+    "p-limit": "latest",
+    "pdfkit": "latest",
+    "pino": "latest",
+    "pino-http": "latest",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@types/express": "latest",
+    "@types/node": "latest",
+    "@types/pdfkit": "latest",
+    "pino-pretty": "latest",
+    "tsx": "latest",
+    "typescript": "latest"
+  }
+}
