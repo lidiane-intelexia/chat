@@ -1,7 +1,10 @@
 ﻿import { z } from 'zod';
 
+//*Guarda as variáveis de ambiente (como  as chaves de API do Google) definidas no seu arquivo .env.
+
 const envSchema = z.object({
   PORT: z.coerce.number().default(3000),
+  DATABASE_URL: z.string().min(1),
   GOOGLE_CLIENT_ID: z.string().min(1),
   GOOGLE_CLIENT_SECRET: z.string().min(1),
   GOOGLE_REDIRECT_URI: z.string().url(),

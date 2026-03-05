@@ -185,8 +185,8 @@ export function buildReportData(records: MessageRecord[], query: ClientQuery): R
     deadlines.push(...extractItems(text, DEADLINE_PATTERNS, 'deadline', time));
   }
 
-  const periodStart = sorted[0]?.message.createTime;
-  const periodEnd = sorted[sorted.length - 1]?.message.createTime;
+  const periodStart = sorted[0]?.message.createTime || undefined;
+  const periodEnd = sorted[sorted.length - 1]?.message.createTime || undefined;
 
   return {
     clientLabel: buildClientLabel(query),

@@ -1,6 +1,6 @@
 ﻿import 'dotenv/config';
 import express from 'express';
-import pinoHttp from 'pino-http';
+import { pinoHttp } from 'pino-http';
 import { env } from './config/env.js';
 import { logger } from './utils/logger.js';
 import { authRouter } from './routes/authRoutes.js';
@@ -18,6 +18,7 @@ app.get('/health', (_req, res) => {
 
 app.use('/auth', authRouter);
 app.use('/reports', reportRouter);
+
 
 app.use(errorHandler);
 

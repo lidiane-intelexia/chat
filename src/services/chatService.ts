@@ -4,6 +4,9 @@ import { toRFC3339 } from '../utils/text.js';
 import { logger } from '../utils/logger.js';
 import type { OAuth2Client } from 'google-auth-library';
 
+
+//*Aqui está a lógica  de negócio para varrer o histórico e gerar o relatório.
+
 export interface MessageRecord {
   space: chat_v1.Schema$Space;
   message: chat_v1.Schema$Message;

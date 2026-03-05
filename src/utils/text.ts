@@ -36,3 +36,10 @@ export function tokenize(value: string) {
   if (!normalized) return [];
   return normalized.split(' ').filter((token) => token.length > 2);
 }
+
+
+// ! Alerta (Vermelho): Use para partes críticas, como o tratamento de erros ou onde as credenciais OAuth são manipuladas.
+// ? Dúvida (Azul): Use quando estiver tentando entender uma lógica do Codex, como a busca por similaridade textual.
+// TODO Tarefa (Laranja): Use para o que falta fazer, como a subpasta por ano no Drive.
+// * Destaque (Verde): Use para explicar funcionalidades que já estão prontas e funcionando.
+// (sem nada) ou //// Riscado (Cinza): Use para códigos que você desativou temporariamente.

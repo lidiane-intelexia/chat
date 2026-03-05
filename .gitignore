@@ -1,0 +1,8 @@
+node_modules
+.env
+credentials.json
+token.json
+node_modules/
+dist/
+.vite/
+.docker/

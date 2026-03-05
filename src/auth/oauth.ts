@@ -2,6 +2,9 @@
 import { env } from '../config/env.js';
 import { tokenStore } from '../storage/tokenStore.js';
 
+//* Contém a lógica de Autenticação via OAuth2 para acessar as APIs do Google, como Chat e Drive.
+
+
 export const CHAT_SCOPES = [
   'https://www.googleapis.com/auth/chat.messages.readonly',
   'https://www.googleapis.com/auth/chat.spaces.readonly'
@@ -34,7 +37,11 @@ export function getAuthUrl() {
 export async function setTokensFromCode(code: string) {
   const client = createOAuthClient();
   const { tokens } = await client.getToken(code);
-  await tokenStore.setTokens(tokens);
+
+  if (!tokens){ 
+    throw new Error('Falha ao obter tokens da API do Google');
+  }
+  await tokenStore.setTokens(tokens as any);
 }
 
 export async function getAuthorizedClient() {
