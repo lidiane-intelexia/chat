@@ -3,12 +3,15 @@ import path from 'node:path';
 import { env } from '../config/env.js';
 
 export interface StoredTokens {
-  access_token?: string;
-  refresh_token?: string;
-  scope?: string;
-  token_type?: string;
-  expiry_date?: number;
-}
+  // Google returns `null` for some fields when they are not available. We
+  // persist the raw values, so allow `null` in addition to `string`/`number`.
+  access_token?: string | null;
+  refresh_token?: string | null;
+  scope?: string | null;
+  token_type?: string | null;
+  expiry_date?: number | null;
+}  
+
 
 const tokenPath = path.resolve(env.TOKEN_STORE_PATH);
 

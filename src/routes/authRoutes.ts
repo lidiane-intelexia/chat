@@ -1,11 +1,31 @@
 ﻿import { Router } from 'express';
-import { getAuthUrl, setTokensFromCode } from '../auth/oauth.js';
+// use the environment-driven OAuth helper instead of the legacy file-based
+// googleAuth module. this removes the requirement for a credentials.json file
+// inside the container.
+import {
+  getAuthUrl,
+  setTokensFromCode
+} from '../auth/oauth.js';
+
 
 export const authRouter = Router();
 
-authRouter.get('/url', (_req, res) => {
-  const url = getAuthUrl();
-  res.json({ url });
+authRouter.get('/url', async (_req, res, next) => {
+  try {
+    const url = getAuthUrl();
+    res.json({ url });
+  } catch (error) {
+    next(error);
+  }
+});
+
+authRouter.get('/google/url', async (_req, res, next) => {
+  try {
+    const url = getAuthUrl();
+    res.json({ url });
+  } catch (error) {
+    next(error);
+  }
 });
 
 authRouter.get('/callback', async (req, res, next) => {
