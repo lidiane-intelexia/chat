@@ -1,5 +1,6 @@
 ﻿import { google, drive_v3 } from 'googleapis';
 import type { OAuth2Client } from 'google-auth-library';
+import { Readable } from 'node:stream';
 import { env } from '../config/env.js';
 
 export interface UploadResult {
@@ -63,8 +64,8 @@ export async function uploadReportToDrive(
     : 'application/vnd.google-apps.document';
 
   const media = options.format === 'pdf'
-    ? { mimeType: 'application/pdf', body: options.pdfBuffer as Buffer }
-    : { mimeType: 'text/plain', body: options.textContent };
+    ? { mimeType: 'application/pdf', body: Readable.from(options.pdfBuffer as Buffer) }
+    : { mimeType: 'text/plain', body: Readable.from(options.textContent) };
 
   const response = await drive.files.create({
     requestBody: {
