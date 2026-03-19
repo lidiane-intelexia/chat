@@ -3,3 +3,4 @@ node_modules/
 credentials.json
 tokens.json
 dist/
+tokens.json

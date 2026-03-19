@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "chat-report-api",
   "version": "1.0.0",
   "private": true,
@@ -12,6 +12,7 @@
     "prisma:migrate": "prisma migrate dev"
   },
   "dependencies": {
+    "@google/genai": "^1.46.0",
     "@prisma/adapter-pg": "latest",
     "@prisma/client": "latest",
     "dotenv": "latest",
@@ -19,18 +20,19 @@
     "fastest-levenshtein": "latest",
     "googleapis": "latest",
     "p-limit": "latest",
-    "pg": "latest",
     "pdfkit": "latest",
+    "pg": "latest",
     "pino": "latest",
     "pino-http": "latest",
+    "puppeteer": "^24.39.1",
     "zod": "latest"
   },
   "devDependencies": {
     "@types/express": "latest",
     "@types/node": "latest",
     "@types/pdfkit": "latest",
-    "prisma": "latest",
     "pino-pretty": "latest",
+    "prisma": "latest",
     "tsx": "latest",
     "typescript": "latest"
   }

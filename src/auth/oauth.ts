@@ -15,7 +15,12 @@ export const DRIVE_SCOPES = [
   'https://www.googleapis.com/auth/drive.metadata.readonly'
 ];
 
-export const ALL_SCOPES = [...CHAT_SCOPES, ...DRIVE_SCOPES];
+export const PEOPLE_SCOPES = [
+  'https://www.googleapis.com/auth/contacts.other.readonly',
+  'https://www.googleapis.com/auth/directory.readonly'
+];
+
+export const ALL_SCOPES = [...CHAT_SCOPES, ...DRIVE_SCOPES, ...PEOPLE_SCOPES];
 
 function hasRequiredScopes(scopeList?: string | null) {
   if (!scopeList) return false;

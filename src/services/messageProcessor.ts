@@ -1,5 +1,6 @@
 ﻿import { similarityRatio } from '../utils/similarity.js';
 import { digitsOnly, normalizeText, tokenize, STOPWORDS_PT } from '../utils/text.js';
+import { replaceIdsWithNames } from './aiService.js';
 import type { MessageRecord } from './chatService.js';
 
 export interface ClientQuery {
@@ -65,6 +66,8 @@ const DATE_REGEX = /(\d{1,2}\/\d{1,2}\/\d{2,4}|\d{1,2}\s+de\s+[a-zçã]+\s+de\s+
 function safeText(value?: string | null) {
   return value?.trim() || '';
 }
+
+
 
 function buildClientLabel(query: ClientQuery) {
   return query.name || query.cnpj || query.email || query.phone || 'Cliente';
@@ -153,7 +156,7 @@ function extractItems(text: string, patterns: RegExp[], type: ActionItem['type']
   return items;
 }
 
-export function buildReportData(records: MessageRecord[], query: ClientQuery): ReportData {
+export function buildReportData(records: MessageRecord[], query: ClientQuery, nameMap?: Map<string, string>): ReportData {
   const sorted = [...records].sort((a, b) => {
     const timeA = new Date(a.message.createTime || 0).getTime();
     const timeB = new Date(b.message.createTime || 0).getTime();
@@ -167,16 +170,25 @@ export function buildReportData(records: MessageRecord[], query: ClientQuery): R
   const timeline: TimelineEntry[] = [];
 
   for (const record of sorted) {
-    const sender = record.message.sender?.displayName || record.message.sender?.name || 'Desconhecido';
+    const senderId = record.message.sender?.name || '';
+    const sender = record.message.sender?.displayName
+      || nameMap?.get(senderId)
+      || 'Desconhecido';
     participants.add(sender);
 
     const time = record.message.createTime || '';
-    const text = safeText(record.message.text) || '[Mensagem sem texto]';
+    const rawText = safeText(record.message.text) || '[Mensagem sem texto]';
+    const text = nameMap ? replaceIdsWithNames(rawText, nameMap) : rawText;
+
+    const spaceId = record.space.name || '';
+    const spaceName = record.space.displayName
+      || nameMap?.get(spaceId)
+      || 'Espaco';
 
     timeline.push({
       time,
       sender,
-      space: record.space.displayName || record.space.name || 'Espaço',
+      space: spaceName,
       text
     });
 

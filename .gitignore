@@ -1,7 +1,7 @@
 node_modules
 .env
 credentials.json
-token.json
+tokens.json
 node_modules/
 dist/
 .vite/

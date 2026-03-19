@@ -5,6 +5,7 @@ import { getAuthorizedClient } from '../auth/oauth.js';
 import { findMessagesAcrossSpaces } from '../services/chatService.js';
 import { matchMessage, type ClientQuery } from '../services/messageProcessor.js';
 import { generateReport } from '../services/reportService.js';
+import { resolveAllIdentities } from '../services/aiService.js';
 import { ensureClientFolder, uploadReportToDrive } from '../services/driveService.js';
 import { prisma } from '../db/prisma.js';
 import { env } from '../config/env.js';
@@ -75,8 +76,10 @@ reportRouter.post('/', async (req, res, next) => {
     }
 
     const format = payload.format ?? env.REPORT_FORMAT_DEFAULT;
+    // Resolve identidades: message history + People API
+    const nameMap = await resolveAllIdentities(auth, records);
     // Gera o relatorio estruturado a partir das mensagens encontradas.
-    const reportOutput = await generateReport(records, query, format);
+    const reportOutput = await generateReport(records, query, format, nameMap);
 
     // Calcula o ano da pasta pelo fim do periodo; se falhar, usa o ano atual.
     const periodEnd = reportOutput.report.periodEnd ? new Date(reportOutput.report.periodEnd) : new Date();
