@@ -106,6 +106,7 @@ reportRouter.post('/', async (req, res, next) => {
     });
 
     const driveLink = upload.webViewLink ?? `https://drive.google.com/file/d/${upload.fileId}/view`;
+    const downloadLink = `https://drive.google.com/uc?export=download&id=${upload.fileId}`;
 
     const summary = {
       client: reportOutput.report.clientLabel,
@@ -158,6 +159,7 @@ reportRouter.post('/', async (req, res, next) => {
       status: 'ok',
       fileId: upload.fileId,
       webViewLink: driveLink,
+      downloadLink,
       summary: {
         client: summary.client,
         periodStart: summary.periodStart,

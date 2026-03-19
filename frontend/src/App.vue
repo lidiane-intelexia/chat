@@ -4,6 +4,7 @@ import { computed, reactive, ref } from 'vue';
 type ReportRow = {
   id: string;
   link: string;
+  downloadLink: string;
   client: string;
   period: string;
   totalMessages: number;
@@ -72,6 +73,7 @@ async function submit() {
     reports.value.unshift({
       id: data.fileId,
       link: data.webViewLink,
+      downloadLink: data.downloadLink,
       client: data.summary.client,
       period: formatPeriod(data.summary.periodStart, data.summary.periodEnd),
       totalMessages: data.summary.totalMessages,
@@ -218,7 +220,7 @@ async function submit() {
                   <th class="text-left px-4 py-3 font-medium">Cliente</th>
                   <th class="text-left px-4 py-3 font-medium">Período</th>
                   <th class="text-left px-4 py-3 font-medium">Mensagens</th>
-                  <th class="text-left px-4 py-3 font-medium">Link</th>
+                  <th class="text-left px-4 py-3 font-medium">Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -239,14 +241,24 @@ async function submit() {
                     {{ report.totalMessages }} mensagens · {{ report.participants }} participantes
                   </td>
                   <td class="px-4 py-3">
-                    <a
-                      :href="report.link"
-                      target="_blank"
-                      rel="noreferrer"
-                      class="text-emerald-300 hover:text-emerald-200 font-medium"
-                    >
-                      Abrir no Drive
-                    </a>
+                    <div class="flex items-center gap-2">
+                      <a
+                        :href="report.link"
+                        target="_blank"
+                        rel="noreferrer"
+                        class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 hover:text-emerald-200 text-xs font-medium transition"
+                      >
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-4.5-6H18m0 0v4.5m0-4.5l-7.5 7.5"/></svg>
+                        Visualizar
+                      </a>
+                      <a
+                        :href="report.downloadLink"
+                        class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white text-xs font-medium transition"
+                      >
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>
+                        Download
+                      </a>
+                    </div>
                   </td>
                 </tr>
               </tbody>
