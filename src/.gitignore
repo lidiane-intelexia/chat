@@ -4,3 +4,4 @@ credentials.json
 tokens.json
 dist/
 tokens.json
+env.ts
