@@ -78,8 +78,12 @@ reportRouter.post('/', async (req, res, next) => {
     const format = payload.format ?? env.REPORT_FORMAT_DEFAULT;
     // Resolve identidades: message history + People API
     const nameMap = await resolveAllIdentities(auth, records);
-    // Gera o relatorio estruturado a partir das mensagens encontradas.
-    const reportOutput = await generateReport(records, query, format, nameMap);
+    // Gera o relatorio estruturado com contexto de precisao para o Gemini.
+    const reportOutput = await generateReport(records, query, format, nameMap, {
+      clientName: query.name,
+      similarity: threshold,
+      totalFiltered: records.length,
+    });
 
     // Calcula o ano da pasta pelo fim do periodo; se falhar, usa o ano atual.
     const periodEnd = reportOutput.report.periodEnd ? new Date(reportOutput.report.periodEnd) : new Date();

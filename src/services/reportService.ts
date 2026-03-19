@@ -2,7 +2,7 @@ import puppeteer from 'puppeteer';
 import { buildReportData } from './messageProcessor.js';
 import type { ClientQuery, ReportData } from './messageProcessor.js';
 import type { MessageRecord } from './chatService.js';
-import { analyzeWithAI } from './aiService.js';
+import { analyzeWithAI, type AnalyzeOptions } from './aiService.js';
 
 export interface ReportOutput {
   report: ReportData;
@@ -14,20 +14,28 @@ function formatDate(value?: string) {
   if (!value) return '';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString('pt-BR');
+  return date.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
 }
 
 function formatDateTimePrecise(value?: string) {
   if (!value) return '';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  const dd = String(date.getDate()).padStart(2, '0');
-  const mm = String(date.getMonth() + 1).padStart(2, '0');
-  const yyyy = date.getFullYear();
-  const hh = String(date.getHours()).padStart(2, '0');
-  const min = String(date.getMinutes()).padStart(2, '0');
-  const ss = String(date.getSeconds()).padStart(2, '0');
-  return `${dd}/${mm}/${yyyy} - ${hh}:${min}:${ss}`;
+  return date.toLocaleString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false,
+  });
+}
+
+function nowBrazil(): string {
+  return new Date().toLocaleString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false,
+  });
 }
 
 function buildExecutiveSummary(report: ReportData) {
@@ -35,7 +43,6 @@ function buildExecutiveSummary(report: ReportData) {
   const period = report.periodStart && report.periodEnd
     ? `${formatDate(report.periodStart)} a ${formatDate(report.periodEnd)}`
     : 'Periodo nao identificado';
-
   return [
     `Total de mensagens analisadas: ${totalMessages}`,
     `Periodo: ${period}`,
@@ -81,118 +88,109 @@ function buildReportText(report: ReportData) {
 }
 
 // ---------------------------------------------------------------------------
-// HTML/CSS Template Engine
+// HTML/CSS Template
 // ---------------------------------------------------------------------------
 
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
-
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  font-size: 11px;
-  line-height: 1.6;
-  color: #1a1a2e;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12pt;
+  line-height: 1.5;
+  color: #1a1a1a;
   background: #fff;
-  padding: 40px 50px;
+  padding: 0;
+  text-align: justify;
 }
 
+/* ---- Header ---- */
 .header {
   text-align: center;
-  margin-bottom: 30px;
-  padding-bottom: 20px;
+  margin-bottom: 36px;
+  padding-bottom: 18px;
   border-bottom: 2px solid #0f3460;
 }
 
 .header h1 {
-  font-size: 22px;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 18pt;
   font-weight: 700;
   color: #0f3460;
+  text-transform: uppercase;
   letter-spacing: 1px;
   margin-bottom: 6px;
 }
 
 .header .subtitle {
-  font-size: 10px;
-  color: #666;
+  font-size: 10pt;
+  color: #555;
   font-weight: 400;
 }
 
-.header .logo-badge {
-  display: inline-block;
-  background: linear-gradient(135deg, #0f3460, #16213e);
-  color: #fff;
-  font-size: 9px;
-  font-weight: 600;
-  padding: 3px 12px;
-  border-radius: 12px;
-  letter-spacing: 1.5px;
-  margin-bottom: 10px;
-}
-
+/* ---- Sections ---- */
 .section {
-  margin-bottom: 28px;
+  margin-bottom: 32px;
   page-break-inside: avoid;
 }
 
 .section-title {
-  font-size: 13px;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12pt;
   font-weight: 700;
   color: #0f3460;
   text-transform: uppercase;
-  letter-spacing: 0.8px;
+  letter-spacing: 0.5px;
   margin-bottom: 10px;
-  padding-bottom: 5px;
+  padding-bottom: 4px;
   border-bottom: 2px solid #e94560;
   display: inline-block;
 }
 
 .section-content {
-  font-size: 10.5px;
-  color: #333;
-  line-height: 1.7;
+  font-size: 12pt;
+  color: #1a1a1a;
+  line-height: 1.5;
+  text-align: justify;
 }
 
 .section-content p {
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
+/* ---- Bullet list ---- */
 .bullet-list {
   list-style: none;
   padding: 0;
+  margin: 8px 0;
 }
 
 .bullet-list li {
-  padding: 5px 0 5px 18px;
+  padding: 6px 0 6px 20px;
   position: relative;
-  font-size: 10.5px;
+  font-size: 12pt;
+  line-height: 1.5;
   border-bottom: 1px solid #f0f0f0;
 }
 
-.bullet-list li:last-child {
-  border-bottom: none;
-}
+.bullet-list li:last-child { border-bottom: none; }
 
 .bullet-list li::before {
   content: '\\203A';
   position: absolute;
-  left: 2px;
+  left: 4px;
   color: #0f3460;
   font-weight: 700;
-  font-size: 14px;
-  line-height: 1.4;
+  font-size: 14pt;
+  line-height: 1.3;
 }
 
-.bold { font-weight: 600; color: #16213e; }
+.bold { font-weight: 700; color: #16213e; }
 
-/* Access Data Table - highlight section */
+/* ---- Access Data Cards ---- */
 .access-section {
-  background: linear-gradient(135deg, #fafbff, #f0f4ff);
-  border: 1px solid #d0d8f0;
-  border-radius: 8px;
-  padding: 18px;
-  margin-bottom: 28px;
+  margin-bottom: 32px;
+  page-break-inside: avoid;
 }
 
 .access-section .section-title {
@@ -200,121 +198,101 @@ body {
   border-bottom-color: #e94560;
 }
 
-.access-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 9.5px;
-  margin-top: 10px;
-  border-radius: 6px;
-  overflow: hidden;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+.access-card {
+  background: #f9f9f9;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 14px 18px;
+  margin-bottom: 12px;
+  page-break-inside: avoid;
 }
 
-.access-table thead th {
-  background: #f2f2f2;
-  color: #16213e;
-  font-weight: 600;
-  font-size: 8.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  padding: 10px 8px;
-  text-align: left;
-  border-bottom: 2px solid #d0d8f0;
+.access-card-title {
+  font-weight: 700;
+  font-size: 11pt;
+  color: #0f3460;
+  margin-bottom: 6px;
 }
 
-.access-table tbody td {
-  padding: 8px 8px;
-  border-bottom: 1px solid #e8e8e8;
+.access-card-field {
+  font-size: 10.5pt;
   color: #333;
-  vertical-align: top;
+  line-height: 1.6;
+  padding-left: 10px;
 }
 
-.access-table tbody tr:nth-child(even) {
-  background: #fafafa;
+.access-card-field .label {
+  color: #555;
 }
 
-.access-table tbody tr:hover {
-  background: #f0f4ff;
+.access-card-field .value {
+  font-weight: 600;
+  color: #1a1a1a;
 }
 
-.access-table .credential {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 9px;
+.access-card-field .credential-value {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10pt;
   background: #fff3f5;
   color: #e94560;
-  padding: 2px 6px;
+  padding: 1px 6px;
   border-radius: 3px;
   border: 1px solid #fdd;
 }
 
 .empty-notice {
-  color: #999;
+  color: #888;
   font-style: italic;
-  font-size: 10px;
+  font-size: 11pt;
   padding: 12px 0;
 }
 
-/* Raw log section */
+/* ---- Raw Log ---- */
 .raw-log {
   page-break-before: always;
 }
 
 .raw-log .section-title {
-  border-bottom-color: #ccc;
+  border-bottom-color: #999;
 }
 
-.log-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 8px;
-  line-height: 1.5;
+.log-entry {
+  margin-bottom: 2px;
 }
 
-.log-table td {
-  padding: 3px 6px;
-  border-bottom: 1px solid #f0f0f0;
-  vertical-align: top;
+.log-header {
+  background: #f0f0f0;
+  padding: 3px 8px;
+  font-size: 8.5pt;
+  line-height: 1.4;
 }
 
-.log-table .log-time {
-  color: #666;
-  white-space: nowrap;
-  width: 130px;
-  font-size: 7.5px;
+.log-date {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 8pt;
+  color: #555;
 }
 
-.log-table .log-sender {
+.log-sender {
+  font-weight: 700;
   color: #0f3460;
-  font-weight: 500;
-  white-space: nowrap;
-  width: 140px;
-  font-size: 7.5px;
+  font-size: 8.5pt;
+  margin-left: 6px;
 }
 
-.log-table .log-msg {
-  color: #333;
+.log-message {
+  color: #1a1a1a;
+  font-size: 9pt;
+  line-height: 1.5;
+  padding: 4px 8px 8px 20px;
   word-break: break-word;
-  font-size: 7.5px;
-}
-
-.log-table tr:nth-child(even) {
-  background: #fafafa;
-}
-
-/* Page footer */
-.page-footer {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  text-align: center;
-  font-size: 8px;
-  color: #999;
-  padding: 10px 50px;
-  border-top: 1px solid #eee;
+  text-align: left;
 }
 `;
+
+// ---------------------------------------------------------------------------
+// Utility functions
+// ---------------------------------------------------------------------------
 
 function escapeHtml(text: string): string {
   return text
@@ -331,7 +309,9 @@ interface ParsedSection {
 
 function parseMarkdownSections(text: string): ParsedSection[] {
   const sections: ParsedSection[] = [];
-  const sectionRegex = /(?:\*\*\[(.+?)\]\*\*|\[(.+?)\])\s*\n/g;
+  // Only match section headers that contain uppercase letters (not dates/times)
+  // e.g. **[RESUMO EXECUTIVO]** or [DADOS DE ACESSO] but NOT [14/06/2023 - 10:14:38]
+  const sectionRegex = /(?:\*\*\[([A-Z][A-Z\s\u00C0-\u00FF]+)\]\*\*|\[([A-Z][A-Z\s\u00C0-\u00FF]+)\])\s*\n/g;
   const matches = [...text.matchAll(sectionRegex)];
 
   if (!matches.length) {
@@ -351,9 +331,8 @@ function parseMarkdownSections(text: string): ParsedSection[] {
 
 function markdownToHtml(content: string): string {
   let html = escapeHtml(content);
-  // Bold
   html = html.replace(/\*\*(.+?)\*\*/g, '<span class="bold">$1</span>');
-  // Lines starting with - as bullet list
+
   const lines = html.split('\n');
   let inList = false;
   const result: string[] = [];
@@ -366,7 +345,7 @@ function markdownToHtml(content: string): string {
     } else {
       if (inList) { result.push('</ul>'); inList = false; }
       if (trimmed === '' || trimmed === '---') {
-        // skip empty or separator
+        // skip
       } else {
         result.push(`<p>${trimmed}</p>`);
       }
@@ -377,12 +356,27 @@ function markdownToHtml(content: string): string {
   return result.join('\n');
 }
 
+// ---------------------------------------------------------------------------
+// Access Data — Card layout
+// ---------------------------------------------------------------------------
+
 interface AccessEntry {
   system: string;
   login: string;
   password: string;
   informedBy: string;
   dateTime: string;
+}
+
+function extractField(text: string, label: string): string {
+  // Match the label followed by a value, including values in brackets like [14/06/2023 - 10:14:38]
+  const regex = new RegExp(`\\*?\\*?${label}\\*?\\*?\\s*:\\s*(.+?)(?:\\n|$)`, 'i');
+  const match = text.match(regex);
+  if (!match) return '';
+  let value = match[1].trim().replace(/\*\*/g, '');
+  // Unwrap brackets from dates: [14/06/2023 - 10:14:38] -> 14/06/2023 - 10:14:38
+  value = value.replace(/^\[(.+)\]$/, '$1');
+  return value;
 }
 
 function parseAccessEntries(text: string): AccessEntry[] {
@@ -410,81 +404,90 @@ function parseAccessEntries(text: string): AccessEntry[] {
   return entries;
 }
 
-function extractField(text: string, label: string): string {
-  const regex = new RegExp(`\\*?\\*?${label}\\*?\\*?\\s*:\\s*(.+?)(?:\\n|$)`, 'i');
-  const match = text.match(regex);
-  return match ? match[1].trim().replace(/\*\*/g, '') : '';
-}
-
-function buildAccessTableHtml(content: string): string {
+function buildAccessCardsHtml(content: string): string {
   const entries = parseAccessEntries(content);
   if (!entries.length) {
     return '<p class="empty-notice">Nenhum dado de acesso compartilhado no periodo.</p>';
   }
 
-  let html = `<table class="access-table">
-    <thead>
-      <tr>
-        <th>Cliente / Sistema</th>
-        <th>Login</th>
-        <th>Senha</th>
-        <th>Informado por</th>
-        <th>Data e Hora</th>
-      </tr>
-    </thead>
-    <tbody>`;
-
+  let html = '';
   for (const entry of entries) {
     html += `
-      <tr>
-        <td>${escapeHtml(entry.system)}</td>
-        <td>${escapeHtml(entry.login)}</td>
-        <td><span class="credential">${escapeHtml(entry.password)}</span></td>
-        <td>${escapeHtml(entry.informedBy)}</td>
-        <td>${escapeHtml(entry.dateTime)}</td>
-      </tr>`;
+      <div class="access-card">
+        <div class="access-card-title">Sistema/Cliente: ${escapeHtml(entry.system)}</div>
+        <div class="access-card-field">
+          <span class="label">&#9658; Login:</span>
+          <span class="value">${escapeHtml(entry.login)}</span>
+        </div>
+        <div class="access-card-field">
+          <span class="label">&#9658; Senha:</span>
+          <span class="credential-value">${escapeHtml(entry.password)}</span>
+        </div>
+        <div class="access-card-field">
+          <span class="label">&#9658; Informado por:</span>
+          <span class="value">${escapeHtml(entry.informedBy)}</span>
+        </div>
+        <div class="access-card-field">
+          <span class="label">&#9658; Data e Hora:</span>
+          <span class="value">${escapeHtml(entry.dateTime)}</span>
+        </div>
+      </div>`;
   }
 
-  html += '</tbody></table>';
   return html;
 }
+
+// ---------------------------------------------------------------------------
+// Raw Log — header line + indented message on next line, no body shading
+// ---------------------------------------------------------------------------
 
 function buildRawLogHtml(content: string): string {
   const lines = content.split('\n').filter((l) => l.trim());
   if (!lines.length) return '<p class="empty-notice">Nenhuma mensagem encontrada.</p>';
 
-  let html = '<table class="log-table"><tbody>';
+  let html = '';
 
   for (const line of lines) {
-    // Parse [DD/MM/AAAA - HH:mm:ss] [Name]: Message
     const match = line.match(/^\[(.+?)\]\s*\[?([^\]:]+?)\]?\s*:\s*(.*)$/);
     if (match) {
-      html += `<tr>
-        <td class="log-time">${escapeHtml(match[1])}</td>
-        <td class="log-sender">${escapeHtml(match[2])}</td>
-        <td class="log-msg">${escapeHtml(match[3])}</td>
-      </tr>`;
+      const rawDateTime = match[1].trim();
+      const dtParts = rawDateTime.split(/\s*[-,]\s*/);
+      const datePart = dtParts[0] || rawDateTime;
+      const timePart = dtParts[1] || '';
+
+      html += `<div class="log-entry">
+        <div class="log-header">
+          <span class="log-date">[${escapeHtml(datePart)} | ${escapeHtml(timePart)}]</span>
+          <span class="log-sender">${escapeHtml(match[2].trim())}:</span>
+        </div>
+        <div class="log-message">${escapeHtml(match[3])}</div>
+      </div>`;
     } else {
-      html += `<tr><td colspan="3" class="log-msg">${escapeHtml(line)}</td></tr>`;
+      html += `<div class="log-entry">
+        <div class="log-header"></div>
+        <div class="log-message">${escapeHtml(line)}</div>
+      </div>`;
     }
   }
 
-  html += '</tbody></table>';
   return html;
 }
 
+// ---------------------------------------------------------------------------
+// Full HTML builder
+// ---------------------------------------------------------------------------
+
 function buildHtml(text: string, report: ReportData): string {
   const sections = parseMarkdownSections(text);
-  const now = new Date().toLocaleString('pt-BR');
+  const generatedAt = nowBrazil();
 
   let body = '';
 
-  // Header
+  // Header — no INTELEXIA badge, just centered title
   body += `
     <div class="header">
-      <div class="logo-badge">INTELEXIA</div>
-      <h1>Relatorio CAT-IA</h1>
-      <div class="subtitle">${escapeHtml(report.clientLabel)} &mdash; Gerado em ${now}</div>
+      <h1>Relatorio Chat Intelligence</h1>
+      <div class="subtitle">${escapeHtml(report.clientLabel)} &mdash; Gerado em ${generatedAt} (Horario de Brasilia)</div>
     </div>`;
 
   // Sections
@@ -493,7 +496,7 @@ function buildHtml(text: string, report: ReportData): string {
       body += `
         <div class="access-section">
           <div class="section-title">${escapeHtml(section.title)}</div>
-          ${buildAccessTableHtml(section.content)}
+          ${buildAccessCardsHtml(section.content)}
         </div>`;
     } else if (section.title === 'RELATORIO BRUTO COMPLETO') {
       body += `
@@ -511,9 +514,6 @@ function buildHtml(text: string, report: ReportData): string {
         </div>`;
     }
   }
-
-  // Footer
-  body += `<div class="page-footer">Intelexia CAT-IA &bull; Relatorio Confidencial</div>`;
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -551,12 +551,12 @@ async function renderPdf(text: string, report: ReportData): Promise<Buffer> {
     const pdfBuffer = await page.pdf({
       format: 'A4',
       printBackground: true,
-      margin: { top: '20mm', bottom: '20mm', left: '15mm', right: '15mm' },
+      margin: { top: '25mm', bottom: '25mm', left: '30mm', right: '20mm' },
       displayHeaderFooter: true,
       headerTemplate: '<span></span>',
       footerTemplate: `
-        <div style="width:100%;text-align:center;font-size:8px;color:#999;font-family:sans-serif;">
-          Intelexia CAT-IA &bull; Pagina <span class="pageNumber"></span> de <span class="totalPages"></span>
+        <div style="width:100%;text-align:center;font-size:8pt;color:#999;font-family:Arial,Helvetica,sans-serif;padding:0 30mm;">
+          Pagina <span class="pageNumber"></span> de <span class="totalPages"></span>
         </div>`,
     });
 
@@ -570,10 +570,16 @@ async function renderPdf(text: string, report: ReportData): Promise<Buffer> {
 // Public API
 // ---------------------------------------------------------------------------
 
-export async function generateReport(records: MessageRecord[], query: ClientQuery, format: 'pdf' | 'gdoc', nameMap?: Map<string, string>) {
+export async function generateReport(
+  records: MessageRecord[],
+  query: ClientQuery,
+  format: 'pdf' | 'gdoc',
+  nameMap?: Map<string, string>,
+  analyzeOptions?: AnalyzeOptions
+) {
   const report = buildReportData(records, query, nameMap);
   const rawText = buildReportText(report);
-  const text = await analyzeWithAI(rawText, records);
+  const text = await analyzeWithAI(rawText, records, analyzeOptions);
   const pdf = format === 'pdf' ? await renderPdf(text, report) : undefined;
 
   return { report, text, pdf } satisfies ReportOutput;

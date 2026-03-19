@@ -11,7 +11,9 @@ const envSchema = z.object({
   TOKEN_STORE_PATH: z.string().default('data/tokens.json'),
   DRIVE_ROOT_FOLDER_ID: z.string().optional().transform((value) => value?.trim() || undefined),
   REPORT_FORMAT_DEFAULT: z.enum(['pdf', 'gdoc']).default('pdf'),
-  LOG_LEVEL: z.string().default('info')
+  LOG_LEVEL: z.string().default('info'),
+  GEMINI_API_KEY: z.string().min(1),
+  GEMINI_MODEL: z.string().default('gemini-2.5-flash-lite')
 });
 
 export const env = envSchema.parse(process.env);

@@ -91,6 +91,36 @@ function extractMessageText(record: MessageRecord) {
   return textParts.filter(Boolean).join(' ');
 }
 
+/**
+ * Common words that cause false positives when a client name overlaps
+ * with everyday vocabulary (e.g. "conta" in "conta de anuncio").
+ */
+const NEGATIVE_CONTEXT_PATTERNS = [
+  /conta\s+d[eao]\s+(anuncio|insta|facebook|google|banco|luz|agua|telefone|email|e-mail)/i,
+  /conta\s+comercial/i,
+  /conta\s+pessoal/i,
+  /minha\s+conta/i,
+  /sua\s+conta/i,
+  /criar\s+conta/i,
+  /trocar\s+de\s+conta/i,
+];
+
+/**
+ * Returns true if the message text uses the query term in a system/generic
+ * context rather than referring to the actual client.
+ */
+function isNegativeContext(messageText: string, query: ClientQuery): boolean {
+  if (!query.name) return false;
+  const nameLower = query.name.toLowerCase();
+  // Only apply negative context filtering for short/ambiguous names
+  if (nameLower.length > 8) return false;
+
+  for (const pattern of NEGATIVE_CONTEXT_PATTERNS) {
+    if (pattern.test(messageText)) return true;
+  }
+  return false;
+}
+
 export function matchMessage(record: MessageRecord, query: ClientQuery, threshold = 0.82) {
   const messageTextRaw = extractMessageText(record);
   const messageText = normalizeText(messageTextRaw);
@@ -99,6 +129,28 @@ export function matchMessage(record: MessageRecord, query: ClientQuery, threshol
 
   if (!queryTokens.length) return false;
 
+  // High precision mode (threshold >= 0.9): require full name match, not individual tokens
+  const highPrecision = threshold >= 0.9;
+
+  if (highPrecision && query.name) {
+    const fullNameNorm = normalizeText(query.name);
+    // Must contain the full client name as-is (not just individual tokens)
+    const hasFullName = messageText.includes(fullNameNorm);
+    const hasExactDigits = query.cnpj && messageDigits.includes(digitsOnly(query.cnpj));
+    const hasExactEmail = query.email && messageText.includes(normalizeText(query.email));
+    const hasExactPhone = query.phone && messageDigits.includes(digitsOnly(query.phone));
+
+    if (!hasFullName && !hasExactDigits && !hasExactEmail && !hasExactPhone) {
+      return false;
+    }
+  }
+
+  // Negative context filter: discard messages that use the search term generically
+  if (isNegativeContext(messageText, query)) {
+    return false;
+  }
+
+  // Standard matching
   for (const token of queryTokens) {
     if (!token) continue;
     if (token.includes('@') && messageText.includes(token)) return true;

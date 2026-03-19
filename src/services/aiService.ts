@@ -5,7 +5,7 @@ import { logger } from '../utils/logger.js';
 import type { MessageRecord } from './chatService.js';
 import type { OAuth2Client } from 'google-auth-library';
 
-const SYSTEM_INSTRUCTION = `Voce e o Analista de Operacoes da Intelexia. Sua tarefa e transformar um log bruto de mensagens do Google Chat em um Relatorio Executivo de Alta Relevancia.
+const SYSTEM_INSTRUCTION = `Voce e o Analista de Operacoes da Intelexia (Chat Intelligence). Sua tarefa e transformar um log bruto de mensagens do Google Chat em um Relatorio Executivo de Alta Relevancia.
 
 Responda estritamente em formato Markdown usando codificacao UTF-8.
 
@@ -220,14 +220,48 @@ export function replaceIdsWithNames(text: string, nameMap: Map<string, string>):
   return result;
 }
 
-export async function analyzeWithAI(rawLog: string, records: MessageRecord[]): Promise<string> {
+export interface AnalyzeOptions {
+  clientName?: string;
+  similarity?: number;
+  totalFiltered?: number;
+}
+
+export async function analyzeWithAI(rawLog: string, records: MessageRecord[], options?: AnalyzeOptions): Promise<string> {
   const nameMap = syncUserDatabase(records);
   const cleanedLog = replaceIdsWithNames(rawLog, nameMap);
+
+  // Build dynamic context instruction based on similarity/query
+  let contextInstruction = '';
+
+  if (options?.clientName) {
+    const precision = options.similarity ?? 0.82;
+    const clientName = options.clientName;
+
+    contextInstruction += `\n\nCONTEXTO DA BUSCA:
+- O usuario pesquisou pelo cliente: "${clientName}".
+- Nivel de precisao configurado: ${(precision * 100).toFixed(0)}%.`;
+
+    if (precision >= 0.9) {
+      contextInstruction += `
+- ALTA PRECISAO: Inclua no relatorio APENAS mensagens que mencionem explicitamente "${clientName}" como cliente, empresa ou pessoa.
+- DESCARTE mensagens que usem a palavra "${clientName}" em contextos genericos de sistema (ex: "conta de anuncio", "conta do Instagram", "trocar de conta").
+- Se uma mensagem nao tem relacao direta com o cliente "${clientName}", NAO a inclua no resumo executivo, decisoes ou pendencias.`;
+    } else if (precision >= 0.7) {
+      contextInstruction += `
+- PRECISAO MEDIA: Priorize mensagens que mencionem diretamente "${clientName}". Inclua mensagens relacionadas ao contexto do cliente mesmo que nao citem o nome explicitamente, mas DESCARTE mensagens claramente genericas que usem a palavra em contexto de sistema.`;
+    }
+  }
+
+  if (options?.totalFiltered) {
+    contextInstruction += `\n- Total de mensagens que passaram no filtro de precisao: ${options.totalFiltered}. Use ESTE numero no [RESUMO EXECUTIVO], nao o total bruto do log.`;
+  }
+
+  const fullInstruction = SYSTEM_INSTRUCTION + contextInstruction;
 
   const response = await ai.models.generateContent({
     model: env.GEMINI_MODEL,
     config: {
-      systemInstruction: SYSTEM_INSTRUCTION,
+      systemInstruction: fullInstruction,
     },
     contents: cleanedLog,
   });
