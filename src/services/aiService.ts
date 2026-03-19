@@ -48,6 +48,15 @@ Formato: - [DATA HH:mm:ss] Evento ou prazo.
 Liste os participantes com uma breve descricao do papel observado nas conversas.
 Use SEMPRE o nome real do participante. Nunca use "Desconhecido" ou "Participante".
 
+**[PRINCIPAIS GARGALOS]**
+Analise todas as conversas e identifique os 3 problemas ou dificuldades que mais se repetiram em relacao ao cliente pesquisado.
+Foque em padroes recorrentes como: atrasos, falhas de comunicacao, problemas tecnicos, falta de retorno, bloqueios operacionais.
+Para cada gargalo, liste:
+- **Problema:** Descricao concisa do gargalo identificado.
+- **Frequencia:** Quantas vezes o tema apareceu nas conversas (aproximado).
+- **Impacto:** Breve descricao de como isso afetou o trabalho ou o cliente.
+Se nenhum gargalo recorrente for identificado, escreva: "Nenhum gargalo recorrente identificado no periodo."
+
 REGRAS DE FORMATACAO:
 - Use titulos em CAIXA ALTA e **negrito** entre colchetes como mostrado acima.
 - Adicione uma linha em branco entre cada secao.

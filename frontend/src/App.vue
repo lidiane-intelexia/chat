@@ -91,7 +91,7 @@ async function submit() {
 
 <template>
   <div class="min-h-screen">
-    <header class="px-6 pt-10 pb-6 max-w-6xl mx-auto">
+    <header class="px-8 pt-10 pb-6 max-w-[1200px] mx-auto">
       <div class="flex flex-col gap-3">
         <span class="text-sm uppercase tracking-[0.4em] text-emerald-200/70">Chat Intelligence</span>
         <h1 class="text-4xl md:text-5xl font-display font-semibold text-white">
@@ -103,8 +103,8 @@ async function submit() {
       </div>
     </header>
 
-    <main class="px-6 pb-16 max-w-6xl mx-auto grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-      <section class="bg-ink-800/90 border border-white/10 rounded-3xl p-6 shadow-glow">
+    <main class="px-8 pb-16 max-w-[1200px] mx-auto grid gap-6 grid-cols-1 lg:grid-cols-[2fr_3fr]">
+      <section class="bg-ink-800/90 border border-white/10 rounded-3xl p-8 shadow-glow">
         <div class="flex items-center justify-between mb-6">
           <div>
             <h2 class="text-2xl font-display">Nova Busca</h2>
@@ -113,7 +113,7 @@ async function submit() {
           <span class="text-xs px-3 py-1 rounded-full bg-emerald-500/15 text-emerald-200">Tempo real</span>
         </div>
 
-        <form class="grid gap-4" @submit.prevent="submit">
+        <form class="grid gap-5" @submit.prevent="submit">
           <div class="grid md:grid-cols-2 gap-4">
             <div class="flex flex-col gap-2">
               <label class="text-xs uppercase tracking-wide text-slate-400">Nome</label>
@@ -272,6 +272,6 @@ async function submit() {
 
 <style scoped>
 .input {
-  @apply bg-ink-900/60 border border-white/10 rounded-2xl px-4 py-3 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/60 transition;
+  @apply bg-ink-900/60 border border-white/10 rounded-2xl px-5 py-3.5 text-slate-100 text-sm placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/60 transition w-full;
 }
 </style>
