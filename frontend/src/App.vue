@@ -20,6 +20,7 @@ const form = reactive({
   cnpj: '',
   email: '',
   phone: '',
+  link: '',
   startDate: '',
   endDate: '',
   format: 'pdf' as 'pdf' | 'gdoc',
@@ -30,7 +31,7 @@ const loading = ref(false);
 const error = ref('');
 const reports = ref<ReportRow[]>([]);
 
-const canSubmit = computed(() => Boolean(form.name || form.cnpj || form.email || form.phone));
+const canSubmit = computed(() => Boolean(form.name || form.cnpj || form.email || form.phone || form.link));
 
 function formatPeriod(start?: string, end?: string) {
   if (!start && !end) return 'Período não informado';
@@ -51,7 +52,8 @@ async function submit() {
         name: form.name || undefined,
         cnpj: form.cnpj || undefined,
         email: form.email || undefined,
-        phone: form.phone || undefined
+        phone: form.phone || undefined,
+        link: form.link || undefined
       },
       startDate: form.startDate || undefined,
       endDate: form.endDate || undefined,
@@ -91,7 +93,7 @@ async function submit() {
 
 <template>
   <div class="min-h-screen">
-    <header class="px-8 pt-10 pb-6 max-w-[1200px] mx-auto">
+    <header class="px-8 pt-10 pb-6 max-w-[1400px] mx-auto">
       <div class="flex flex-col gap-3">
         <span class="text-sm uppercase tracking-[0.4em] text-emerald-200/70">Chat Intelligence</span>
         <h1 class="text-4xl md:text-5xl font-display font-semibold text-white">
@@ -103,9 +105,10 @@ async function submit() {
       </div>
     </header>
 
-    <main class="px-8 pb-16 max-w-[1200px] mx-auto grid gap-6 grid-cols-1 lg:grid-cols-[2fr_3fr]">
-      <section class="bg-ink-800/90 border border-white/10 rounded-3xl p-8 shadow-glow">
-        <div class="flex items-center justify-between mb-6">
+    <main class="px-8 pb-16 max-w-[1400px] mx-auto flex flex-col gap-6">
+      <!-- Nova Busca — largura total -->
+      <section class="bg-ink-800/90 border border-white/10 rounded-3xl p-10 shadow-glow">
+        <div class="flex items-center justify-between mb-8">
           <div>
             <h2 class="text-2xl font-display">Nova Busca</h2>
             <p class="text-slate-400 text-sm">Preencha ao menos um identificador para iniciar a varredura.</p>
@@ -113,8 +116,8 @@ async function submit() {
           <span class="text-xs px-3 py-1 rounded-full bg-emerald-500/15 text-emerald-200">Tempo real</span>
         </div>
 
-        <form class="grid gap-5" @submit.prevent="submit">
-          <div class="grid md:grid-cols-2 gap-4">
+        <form class="grid gap-6" @submit.prevent="submit">
+          <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
             <div class="flex flex-col gap-2">
               <label class="text-xs uppercase tracking-wide text-slate-400">Nome</label>
               <input v-model="form.name" class="input" placeholder="Empresa Alfa" />
@@ -123,9 +126,6 @@ async function submit() {
               <label class="text-xs uppercase tracking-wide text-slate-400">CNPJ</label>
               <input v-model="form.cnpj" class="input" placeholder="00.000.000/0000-00" />
             </div>
-          </div>
-
-          <div class="grid md:grid-cols-2 gap-4">
             <div class="flex flex-col gap-2">
               <label class="text-xs uppercase tracking-wide text-slate-400">E-mail</label>
               <input v-model="form.email" class="input" placeholder="contato@empresa.com" />
@@ -136,7 +136,12 @@ async function submit() {
             </div>
           </div>
 
-          <div class="grid md:grid-cols-2 gap-4">
+          <div class="flex flex-col gap-2">
+            <label class="text-xs uppercase tracking-wide text-slate-400">Link da Rede Social / Site</label>
+            <input v-model="form.link" class="input" placeholder="https://instagram.com/empresa ou https://empresa.com.br" />
+          </div>
+
+          <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
             <div class="flex flex-col gap-2">
               <label class="text-xs uppercase tracking-wide text-slate-400">Data inicial</label>
               <input v-model="form.startDate" type="date" class="input" />
@@ -145,9 +150,6 @@ async function submit() {
               <label class="text-xs uppercase tracking-wide text-slate-400">Data final</label>
               <input v-model="form.endDate" type="date" class="input" />
             </div>
-          </div>
-
-          <div class="grid md:grid-cols-3 gap-4">
             <div class="flex flex-col gap-2">
               <label class="text-xs uppercase tracking-wide text-slate-400">Formato</label>
               <select v-model="form.format" class="input">
@@ -155,11 +157,11 @@ async function submit() {
                 <option value="gdoc">Google Doc</option>
               </select>
             </div>
-            <div class="md:col-span-2 flex flex-col gap-2">
+            <div class="flex flex-col gap-2">
               <label class="text-xs uppercase tracking-wide text-slate-400">
-                Precisão da busca (similarity)
+                Precisão da busca
               </label>
-              <div class="flex items-center gap-3">
+              <div class="flex items-center gap-3 h-[50px]">
                 <input
                   v-model.number="form.similarityThreshold"
                   type="range"
@@ -168,7 +170,7 @@ async function submit() {
                   step="0.01"
                   class="w-full"
                 />
-                <span class="text-sm text-slate-200 w-14 text-right">{{ form.similarityThreshold.toFixed(2) }}</span>
+                <span class="text-sm text-slate-200 w-12 text-right font-medium">{{ form.similarityThreshold.toFixed(2) }}</span>
               </div>
             </div>
           </div>
@@ -179,7 +181,7 @@ async function submit() {
               <span v-if="!canSubmit" class="text-xs text-slate-400">Informe um identificador.</span>
               <button
                 type="submit"
-                class="px-5 py-3 rounded-full bg-emerald-500 text-slate-900 font-semibold hover:bg-emerald-400 transition disabled:opacity-50"
+                class="px-6 py-3 rounded-full bg-emerald-500 text-slate-900 font-semibold hover:bg-emerald-400 transition disabled:opacity-50"
                 :disabled="loading"
               >
                 Gerar relatório
@@ -189,8 +191,9 @@ async function submit() {
         </form>
       </section>
 
-      <section class="flex flex-col gap-6">
-        <div class="bg-ink-800/90 border border-white/10 rounded-3xl p-6">
+      <!-- Status + Relatórios — lado a lado -->
+      <div class="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-6">
+        <section class="bg-ink-800/90 border border-white/10 rounded-3xl p-6">
           <h2 class="text-2xl font-display">Status da Varredura</h2>
           <p class="text-slate-400 text-sm">Acompanhe o progresso enquanto varremos o Google Chat.</p>
 
@@ -205,9 +208,9 @@ async function submit() {
           <div class="mt-6" v-else>
             <p class="text-slate-300">Sem execução ativa no momento.</p>
           </div>
-        </div>
+        </section>
 
-        <div class="bg-ink-800/90 border border-white/10 rounded-3xl p-6">
+        <section class="bg-ink-800/90 border border-white/10 rounded-3xl p-6">
           <div class="flex items-center justify-between">
             <h2 class="text-2xl font-display">Últimos Relatórios</h2>
             <span class="text-xs uppercase tracking-[0.3em] text-slate-400">Drive</span>
@@ -264,8 +267,8 @@ async function submit() {
               </tbody>
             </table>
           </div>
-        </div>
-      </section>
+        </section>
+      </div>
     </main>
   </div>
 </template>

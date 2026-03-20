@@ -187,6 +187,47 @@ body {
 
 .bold { font-weight: 700; color: #16213e; }
 
+/* ---- Gargalos (Bottlenecks) ---- */
+.gargalo-item {
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #eee;
+}
+
+.gargalo-item:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.gargalo-problema {
+  font-weight: 700;
+  font-size: 12pt;
+  color: #0f3460;
+  margin-bottom: 3px;
+}
+
+.gargalo-frequencia {
+  font-size: 10pt;
+  color: #888;
+  margin-bottom: 3px;
+}
+
+.gargalo-impacto {
+  font-size: 11pt;
+  color: #333;
+  padding-left: 18px;
+  text-align: justify;
+  line-height: 1.5;
+}
+
+.gargalo-impacto::before {
+  content: '\\21B3  ';
+  color: #e94560;
+  font-weight: 700;
+  margin-left: -18px;
+}
+
 /* ---- Access Data Cards ---- */
 .access-section {
   margin-bottom: 32px;
@@ -438,6 +479,43 @@ function buildAccessCardsHtml(content: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Gargalos (Bottlenecks) — structured rendering
+// ---------------------------------------------------------------------------
+
+function buildGargalosHtml(content: string): string {
+  // Parse blocks: each gargalo starts with "- **Problema:**"
+  const blocks = content.split(/(?=^-\s\*?\*?Problema)/m).filter((b) => b.trim());
+
+  if (!blocks.length) {
+    // Fallback: render as regular markdown if pattern not found
+    return markdownToHtml(content);
+  }
+
+  let html = '';
+  for (const block of blocks) {
+    const problema = extractField(block, 'Problema');
+    const frequencia = extractField(block, 'Frequencia') || extractField(block, 'Frequência');
+    const impacto = extractField(block, 'Impacto');
+
+    if (!problema && !impacto) continue;
+
+    html += `<div class="gargalo-item">`;
+    if (problema) {
+      html += `<div class="gargalo-problema">${escapeHtml(problema)}</div>`;
+    }
+    if (frequencia) {
+      html += `<div class="gargalo-frequencia">${escapeHtml(frequencia)}</div>`;
+    }
+    if (impacto) {
+      html += `<div class="gargalo-impacto">${escapeHtml(impacto)}</div>`;
+    }
+    html += `</div>`;
+  }
+
+  return html || markdownToHtml(content);
+}
+
+// ---------------------------------------------------------------------------
 // Raw Log — header line + indented message on next line, no body shading
 // ---------------------------------------------------------------------------
 
@@ -497,6 +575,14 @@ function buildHtml(text: string, report: ReportData): string {
         <div class="access-section">
           <div class="section-title">${escapeHtml(section.title)}</div>
           ${buildAccessCardsHtml(section.content)}
+        </div>`;
+    } else if (section.title === 'PRINCIPAIS GARGALOS') {
+      body += `
+        <div class="section">
+          <div class="section-title">${escapeHtml(section.title)}</div>
+          <div class="section-content">
+            ${buildGargalosHtml(section.content)}
+          </div>
         </div>`;
     } else if (section.title === 'RELATORIO BRUTO COMPLETO') {
       body += `

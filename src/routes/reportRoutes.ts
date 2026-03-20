@@ -16,9 +16,10 @@ const requestSchema = z.object({
     name: z.string().optional(),
     cnpj: z.string().optional(),
     email: z.string().email().optional(),
-    phone: z.string().optional()
-  }).refine((value) => Boolean(value.name || value.cnpj || value.email || value.phone), {
-    message: 'Informe ao menos um identificador (nome, CNPJ, e-mail ou telefone).'
+    phone: z.string().optional(),
+    link: z.string().optional()
+  }).refine((value) => Boolean(value.name || value.cnpj || value.email || value.phone || value.link), {
+    message: 'Informe ao menos um identificador (nome, CNPJ, e-mail, telefone ou link).'
   }),
   startDate: z.string().optional(),
   endDate: z.string().optional(),

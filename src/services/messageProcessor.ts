@@ -8,6 +8,7 @@ export interface ClientQuery {
   cnpj?: string;
   email?: string;
   phone?: string;
+  link?: string;
 }
 
 export interface ActionItem {
@@ -73,6 +74,24 @@ function buildClientLabel(query: ClientQuery) {
   return query.name || query.cnpj || query.email || query.phone || 'Cliente';
 }
 
+/**
+ * Extracts the username/handle from a social media or website URL.
+ * e.g. "https://instagram.com/conta1" -> "conta1"
+ *      "https://www.facebook.com/empresa.oficial" -> "empresa.oficial"
+ */
+function extractUsernameFromLink(link: string): string | null {
+  try {
+    const url = new URL(link.startsWith('http') ? link : `https://${link}`);
+    const pathParts = url.pathname.split('/').filter(Boolean);
+    // Return the first meaningful path segment (the username)
+    return pathParts[0] || null;
+  } catch {
+    // If URL parsing fails, try to extract after the last /
+    const match = link.match(/\/([^/?#]+)\s*$/);
+    return match?.[1] || null;
+  }
+}
+
 function buildQueryTokens(query: ClientQuery) {
   const tokens: string[] = [];
   if (query.name) tokens.push(...tokenize(query.name));
@@ -80,6 +99,43 @@ function buildQueryTokens(query: ClientQuery) {
   if (query.cnpj) tokens.push(digitsOnly(query.cnpj));
   if (query.phone) tokens.push(digitsOnly(query.phone));
   return tokens.filter(Boolean);
+}
+
+/**
+ * Builds link-specific search terms from the provided URL.
+ * Returns the full URL (normalized) and the extracted username for @mention matching.
+ */
+function buildLinkTerms(link?: string): { url: string; username: string | null } | null {
+  if (!link) return null;
+  const normalized = link.trim().toLowerCase();
+  const username = extractUsernameFromLink(normalized);
+  return { url: normalized, username };
+}
+
+/**
+ * Checks if a message matches the provided link (URL or @username).
+ */
+function matchByLink(messageText: string, linkTerms: { url: string; username: string | null }): boolean {
+  const textLower = messageText.toLowerCase();
+
+  // Match exact URL or partial URL
+  if (textLower.includes(linkTerms.url)) return true;
+
+  // Match without protocol (e.g. "instagram.com/conta1")
+  const withoutProtocol = linkTerms.url.replace(/^https?:\/\/(www\.)?/, '');
+  if (textLower.includes(withoutProtocol)) return true;
+
+  // Match @username mention (e.g. "@conta1")
+  if (linkTerms.username) {
+    const usernameLower = linkTerms.username.toLowerCase();
+    // Match @username or just the username as a standalone word
+    if (textLower.includes(`@${usernameLower}`)) return true;
+    // Match username as a whole word (not partial)
+    const wordBoundary = new RegExp(`\\b${usernameLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+    if (wordBoundary.test(messageText)) return true;
+  }
+
+  return false;
 }
 
 function extractMessageText(record: MessageRecord) {
@@ -126,6 +182,10 @@ export function matchMessage(record: MessageRecord, query: ClientQuery, threshol
   const messageText = normalizeText(messageTextRaw);
   const messageDigits = digitsOnly(messageTextRaw);
   const queryTokens = buildQueryTokens(query);
+  const linkTerms = buildLinkTerms(query.link);
+
+  // Hybrid search: if link matches, include this message regardless of other filters
+  if (linkTerms && matchByLink(messageTextRaw, linkTerms)) return true;
 
   if (!queryTokens.length) return false;
 
@@ -223,24 +283,29 @@ export function buildReportData(records: MessageRecord[], query: ClientQuery, na
 
   for (const record of sorted) {
     const senderId = record.message.sender?.name || '';
-    const sender = record.message.sender?.displayName
+    const spaceName = record.space.displayName
+      || nameMap?.get(record.space.name || '')
+      || '';
+    let sender = record.message.sender?.displayName
       || nameMap?.get(senderId)
-      || 'Desconhecido';
+      || '';
+
+    // If sender is unknown, attribute to the space/group as automated message
+    if (!sender || sender === 'Desconhecido') {
+      sender = spaceName
+        ? `${spaceName} - Automatica`
+        : 'Sistema - Automatica';
+    }
     participants.add(sender);
 
     const time = record.message.createTime || '';
     const rawText = safeText(record.message.text) || '[Mensagem sem texto]';
     const text = nameMap ? replaceIdsWithNames(rawText, nameMap) : rawText;
 
-    const spaceId = record.space.name || '';
-    const spaceName = record.space.displayName
-      || nameMap?.get(spaceId)
-      || 'Espaco';
-
     timeline.push({
       time,
       sender,
-      space: spaceName,
+      space: spaceName || 'Espaco',
       text
     });
 
