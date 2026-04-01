@@ -177,7 +177,7 @@ function isNegativeContext(messageText: string, query: ClientQuery): boolean {
   return false;
 }
 
-export function matchMessage(record: MessageRecord, query: ClientQuery, threshold = 0.82) {
+export function matchMessage(record: MessageRecord, query: ClientQuery, threshold = 0.7) {
   const messageTextRaw = extractMessageText(record);
   const messageText = normalizeText(messageTextRaw);
   const messageDigits = digitsOnly(messageTextRaw);
@@ -218,9 +218,9 @@ export function matchMessage(record: MessageRecord, query: ClientQuery, threshol
     if (messageText.includes(token)) return true;
   }
 
-  const messageTokens = tokenize(messageTextRaw).slice(0, 200);
+  const messageTokens = tokenize(messageTextRaw);
   for (const token of queryTokens) {
-    if (token.length < 3 || token.includes('@') || /^\d+$/.test(token)) continue;
+    if (token.length < 2 || token.includes('@') || /^\d+$/.test(token)) continue;
     for (const msgToken of messageTokens) {
       if (similarityRatio(token, msgToken) >= threshold) {
         return true;

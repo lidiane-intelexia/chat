@@ -23,8 +23,6 @@ services:
     container_name: chat-report-app
     depends_on:
       - db
-    env_file:
-      - .env
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/chat_reports?schema=public
     ports:

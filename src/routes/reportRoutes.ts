@@ -51,7 +51,7 @@ reportRouter.post('/', async (req, res, next) => {
     const query = payload.query as ClientQuery;
     // Recupera as credenciais OAuth 2.0 para agir em nome do usuario no Google.
     const auth = await getAuthorizedClient();
-    const threshold = payload.similarityThreshold ?? 0.82;
+    const threshold = payload.similarityThreshold ?? 0.7;
 
     await prisma.searchLog.create({
       data: {
