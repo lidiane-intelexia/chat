@@ -1,48 +1,104 @@
-﻿import { google, drive_v3 } from 'googleapis';
+import { google, drive_v3 } from 'googleapis';
 import type { OAuth2Client } from 'google-auth-library';
 import { Readable } from 'node:stream';
-import { env } from '../config/env.js';
+import { logger } from '../utils/logger.js';
 
 export interface UploadResult {
   fileId: string;
   webViewLink?: string | null;
 }
 
-function buildFolderQuery(name: string, parentId?: string) {
-  const escapedName = name.replace(/'/g, "\\'");
-  const parentFilter = parentId ? ` and '${parentId}' in parents` : '';
-  return `mimeType = 'application/vnd.google-apps.folder' and name = '${escapedName}' and trashed = false${parentFilter}`;
+const SHARED_DRIVE_NAME = 'Drive Clientes DPG';
+const FOLDER_PATH = ['Relacionamento com Cliente', 'Relatórios'];
+
+/**
+ * Localiza um Drive compartilhado pelo nome, percorrendo todas as páginas.
+ */
+async function findSharedDrive(drive: drive_v3.Drive, name: string): Promise<string> {
+  let pageToken: string | undefined;
+
+  do {
+    const res = await drive.drives.list({
+      pageSize: 100,
+      fields: 'nextPageToken, drives(id, name)',
+      ...(pageToken ? { pageToken } : {})
+    });
+
+    logger.debug({ drives: res.data.drives?.map((d) => d.name) }, 'Drives compartilhados encontrados');
+
+    const found = res.data.drives?.find((d) => d.name === name);
+    if (found?.id) return found.id;
+
+    pageToken = res.data.nextPageToken ?? undefined;
+  } while (pageToken);
+
+  throw new Error(
+    `Drive compartilhado "${name}" não encontrado. ` +
+    `Verifique se a conta autenticada tem acesso ao drive compartilhado.`
+  );
 }
 
-export async function findOrCreateFolder(
-  auth: OAuth2Client,
+/**
+ * Busca uma pasta pelo nome dentro de um pai no Drive compartilhado.
+ * Se não existir, cria automaticamente.
+ */
+async function findOrCreateFolderInDrive(
+  drive: drive_v3.Drive,
   name: string,
-  parentId?: string
-) {
-  const drive = google.drive({ version: 'v3', auth });
+  driveId: string,
+  parentId: string
+): Promise<string> {
+  const escapedName = name.replace(/'/g, "\\'");
+  const q = `mimeType = 'application/vnd.google-apps.folder' and name = '${escapedName}' and '${parentId}' in parents and trashed = false`;
+
+  logger.debug({ folderName: name, parentId }, 'Buscando pasta no Drive compartilhado');
 
   const listResponse = await drive.files.list({
-    q: buildFolderQuery(name, parentId),
+    q,
     fields: 'files(id, name)',
-    spaces: 'drive',
+    corpora: 'drive',
+    driveId,
     includeItemsFromAllDrives: true,
     supportsAllDrives: true
   });
 
   const existing = listResponse.data.files?.[0];
-  if (existing?.id) return existing.id;
+  if (existing?.id) {
+    logger.debug({ folderId: existing.id, folderName: name }, 'Pasta encontrada');
+    return existing.id;
+  }
+
+  logger.info({ folderName: name, parentId }, 'Pasta não encontrada, criando...');
 
   const createResponse = await drive.files.create({
     requestBody: {
       name,
       mimeType: 'application/vnd.google-apps.folder',
-      parents: parentId ? [parentId] : undefined
+      parents: [parentId]
     },
     fields: 'id',
     supportsAllDrives: true
   });
 
-  return createResponse.data.id as string;
+  const newId = createResponse.data.id as string;
+  logger.info({ folderId: newId, folderName: name }, 'Pasta criada com sucesso');
+  return newId;
+}
+
+/**
+ * Navega (e cria se necessário) o caminho completo no Drive compartilhado:
+ * Drive Clientes DPG → Relacionamento com Cliente → Relatórios
+ */
+async function ensureSharedDrivePath(drive: drive_v3.Drive): Promise<{ driveId: string; relatoriosFolderId: string }> {
+  const driveId = await findSharedDrive(drive, SHARED_DRIVE_NAME);
+  logger.info({ driveId }, `Drive compartilhado "${SHARED_DRIVE_NAME}" localizado`);
+
+  let currentParentId = driveId;
+  for (const folderName of FOLDER_PATH) {
+    currentParentId = await findOrCreateFolderInDrive(drive, folderName, driveId, currentParentId);
+  }
+
+  return { driveId, relatoriosFolderId: currentParentId };
 }
 
 export async function uploadReportToDrive(
@@ -67,6 +123,8 @@ export async function uploadReportToDrive(
     ? { mimeType: 'application/pdf', body: Readable.from(options.pdfBuffer as Buffer) }
     : { mimeType: 'text/plain', body: Readable.from(options.textContent) };
 
+  logger.debug({ fileName: options.fileName, parentId: options.parentId }, 'Enviando relatório para o Drive');
+
   const response = await drive.files.create({
     requestBody: {
       name: options.fileName,
@@ -78,19 +136,29 @@ export async function uploadReportToDrive(
     supportsAllDrives: true
   });
 
+  logger.info({ fileId: response.data.id, fileName: options.fileName }, 'Relatório enviado com sucesso');
+
   return {
     fileId: response.data.id as string,
     webViewLink: response.data.webViewLink
   };
 }
 
+/**
+ * Garante a estrutura completa de pastas no Drive compartilhado:
+ * Drive Clientes DPG / Relacionamento com Cliente / Relatórios / [Cliente] / [Ano]
+ */
 export async function ensureClientFolder(
   auth: OAuth2Client,
   clientFolderName: string,
   year: number
 ) {
-  const rootId = env.DRIVE_ROOT_FOLDER_ID;
-  const clientFolderId = await findOrCreateFolder(auth, clientFolderName, rootId);
-  const yearFolderId = await findOrCreateFolder(auth, String(year), clientFolderId);
+  const drive = google.drive({ version: 'v3', auth });
+
+  const { driveId, relatoriosFolderId } = await ensureSharedDrivePath(drive);
+
+  const clientFolderId = await findOrCreateFolderInDrive(drive, clientFolderName, driveId, relatoriosFolderId);
+  const yearFolderId = await findOrCreateFolderInDrive(drive, String(year), driveId, clientFolderId);
+
   return { clientFolderId, yearFolderId };
 }

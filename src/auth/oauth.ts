@@ -11,8 +11,7 @@ export const CHAT_SCOPES = [
 ];
 
 export const DRIVE_SCOPES = [
-  'https://www.googleapis.com/auth/drive.file',
-  'https://www.googleapis.com/auth/drive.metadata.readonly'
+  'https://www.googleapis.com/auth/drive'
 ];
 
 export const PEOPLE_SCOPES = [
@@ -22,11 +21,11 @@ export const PEOPLE_SCOPES = [
 
 export const ALL_SCOPES = [...CHAT_SCOPES, ...DRIVE_SCOPES, ...PEOPLE_SCOPES];
 
-function hasRequiredScopes(scopeList?: string | null) {
-  if (!scopeList) return false;
+function getMissingScopes(scopeList?: string | null): string[] {
+  if (!scopeList) return ALL_SCOPES;
   const granted = new Set(scopeList.split(/\s+/).filter(Boolean));
-  return ALL_SCOPES.every((scope) => granted.has(scope));
-}  
+  return ALL_SCOPES.filter((scope) => !granted.has(scope));
+}
 
 
 export function createOAuthClient() {
@@ -67,8 +66,12 @@ export async function getAuthorizedClient() {
   if (!tokens) {
     throw new Error('Tokens not found. Authorize via /auth/url first.');
   }
-  if (!hasRequiredScopes(tokens.scope)) {
-    throw new Error('Tokens missing required scopes. Reauthorize via /auth/url.');
+  const missingScopes = getMissingScopes(tokens.scope);
+  if (missingScopes.length > 0) {
+    throw new Error(
+      `Tokens sem os escopos necessários. Reautorize via /auth/url. ` +
+      `Escopos faltando: ${missingScopes.join(', ')}`
+    );
   }
   // `tokens` may contain `null` values, which the google client doesn't expect
   // (it uses `string | undefined`). the easiest fix is to cast to `any` after

@@ -9,7 +9,6 @@ const envSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().min(1),
   GOOGLE_REDIRECT_URI: z.string().url(),
   TOKEN_STORE_PATH: z.string().default('data/tokens.json'),
-  DRIVE_ROOT_FOLDER_ID: z.string().optional().transform((value) => value?.trim() || undefined),
   REPORT_FORMAT_DEFAULT: z.enum(['pdf', 'gdoc']).default('pdf'),
   LOG_LEVEL: z.string().default('info'),
   GEMINI_API_KEY: z.string().min(1),
