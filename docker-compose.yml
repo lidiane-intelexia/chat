@@ -22,8 +22,7 @@ services:
     build: .
     container_name: chat-report-app
     depends_on:
-      db:
-        condition: service_healthy
+      - db
     env_file:
       - .env
     environment:
@@ -37,8 +36,7 @@ services:
     image: dpage/pgadmin4:latest
     container_name: chat-report-pgadmin
     depends_on:
-      db:
-        condition: service_healthy
+      - db
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@admin.com
       PGADMIN_DEFAULT_PASSWORD: admin
