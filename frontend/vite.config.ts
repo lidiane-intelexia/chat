@@ -5,7 +5,10 @@ export default defineConfig({
   plugins: [vue()],
   server: {
     proxy: {
-      '/reports': 'http://localhost:3000',
+      '/reports': {
+        target: 'http://localhost:3000',
+        timeout: 300000
+      },
       '/auth': 'http://localhost:3000',
       '/health': 'http://localhost:3000'
     }

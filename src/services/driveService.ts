@@ -8,8 +8,69 @@ export interface UploadResult {
   webViewLink?: string | null;
 }
 
+interface FolderMatch {
+  id: string;
+  name: string;
+  score: number;
+}
+
 const SHARED_DRIVE_NAME = 'Drive Clientes DPG';
 const FOLDER_PATH = ['Relacionamento com Cliente', 'Relatórios'];
+
+/**
+ * Normaliza um nome para comparação fuzzy:
+ * - lowercase
+ * - remove acentos
+ * - remove prefixos numéricos (ex: "123 - ", "01- ")
+ * - remove caracteres especiais (mantém letras, números e espaços)
+ * - trim e colapsa espaços múltiplos
+ */
+export function normalizeName(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/^\d+\s*[-–—]\s*/, '')
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Calcula score de similaridade entre um nome de pasta e o nome buscado.
+ * - 3: match exato após normalização
+ * - 2: nome normalizado começa com o buscado
+ * - 1: nome normalizado contém o buscado
+ * - 0: sem match
+ */
+function matchScore(folderName: string, searchName: string): number {
+  const normalizedFolder = normalizeName(folderName);
+  const normalizedSearch = normalizeName(searchName);
+
+  if (normalizedFolder === normalizedSearch) return 3;
+  if (normalizedFolder.startsWith(normalizedSearch)) return 2;
+  if (normalizedFolder.includes(normalizedSearch)) return 1;
+  return 0;
+}
+
+/**
+ * Encontra a melhor pasta correspondente entre os resultados do Drive.
+ */
+function findBestMatch(files: drive_v3.Schema$File[], searchName: string): FolderMatch | null {
+  let best: FolderMatch | null = null;
+
+  for (const file of files) {
+    if (!file.id || !file.name) continue;
+    const score = matchScore(file.name, searchName);
+    if (score === 0) continue;
+
+    if (!best || score > best.score) {
+      best = { id: file.id, name: file.name, score };
+    }
+  }
+
+  return best;
+}
 
 /**
  * Localiza um Drive compartilhado pelo nome, percorrendo todas as páginas.
@@ -26,7 +87,7 @@ async function findSharedDrive(drive: drive_v3.Drive, name: string): Promise<str
 
     logger.debug({ drives: res.data.drives?.map((d) => d.name) }, 'Drives compartilhados encontrados');
 
-    const found = res.data.drives?.find((d) => d.name === name);
+    const found = res.data.drives?.find((d) => d.name && matchScore(d.name, name) >= 3);
     if (found?.id) return found.id;
 
     pageToken = res.data.nextPageToken ?? undefined;
@@ -39,7 +100,8 @@ async function findSharedDrive(drive: drive_v3.Drive, name: string): Promise<str
 }
 
 /**
- * Busca uma pasta pelo nome dentro de um pai no Drive compartilhado.
+ * Busca uma pasta pelo nome dentro de um pai no Drive compartilhado,
+ * usando fuzzy matching para lidar com variações de nome.
  * Se não existir, cria automaticamente.
  */
 async function findOrCreateFolderInDrive(
@@ -48,27 +110,42 @@ async function findOrCreateFolderInDrive(
   driveId: string,
   parentId: string
 ): Promise<string> {
-  const escapedName = name.replace(/'/g, "\\'");
-  const q = `mimeType = 'application/vnd.google-apps.folder' and name = '${escapedName}' and '${parentId}' in parents and trashed = false`;
+  const q = `mimeType = 'application/vnd.google-apps.folder' and '${parentId}' in parents and trashed = false`;
 
-  logger.debug({ folderName: name, parentId }, 'Buscando pasta no Drive compartilhado');
+  logger.debug({ folderName: name, normalizedName: normalizeName(name), parentId }, 'Buscando pasta no Drive compartilhado');
 
-  const listResponse = await drive.files.list({
-    q,
-    fields: 'files(id, name)',
-    corpora: 'drive',
-    driveId,
-    includeItemsFromAllDrives: true,
-    supportsAllDrives: true
-  });
+  const allFolders: drive_v3.Schema$File[] = [];
+  let pageToken: string | undefined;
 
-  const existing = listResponse.data.files?.[0];
-  if (existing?.id) {
-    logger.debug({ folderId: existing.id, folderName: name }, 'Pasta encontrada');
-    return existing.id;
+  do {
+    const listResponse = await drive.files.list({
+      q,
+      fields: 'nextPageToken, files(id, name)',
+      corpora: 'drive',
+      driveId,
+      includeItemsFromAllDrives: true,
+      supportsAllDrives: true,
+      pageSize: 100,
+      ...(pageToken ? { pageToken } : {})
+    });
+
+    if (listResponse.data.files) {
+      allFolders.push(...listResponse.data.files);
+    }
+    pageToken = listResponse.data.nextPageToken ?? undefined;
+  } while (pageToken);
+
+  const match = findBestMatch(allFolders, name);
+
+  if (match) {
+    logger.info(
+      { folderId: match.id, folderName: match.name, searchName: name, score: match.score },
+      `Pasta encontrada via fuzzy match (score ${match.score})`
+    );
+    return match.id;
   }
 
-  logger.info({ folderName: name, parentId }, 'Pasta não encontrada, criando...');
+  logger.info({ folderName: name, parentId }, 'Nenhuma pasta correspondente encontrada, criando...');
 
   const createResponse = await drive.files.create({
     requestBody: {
