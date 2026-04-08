@@ -15,7 +15,7 @@ interface FolderMatch {
 }
 
 const SHARED_DRIVE_NAME = 'Drive Clientes DPG';
-const FOLDER_PATH = ['Relacionamento com Cliente', 'Relatórios'];
+const SUBFOLDER_PATH = ['Relacionamento com Cliente', 'Relatórios'];
 
 /**
  * Normaliza um nome para comparação fuzzy:
@@ -163,19 +163,53 @@ async function findOrCreateFolderInDrive(
 }
 
 /**
- * Navega (e cria se necessário) o caminho completo no Drive compartilhado:
- * Drive Clientes DPG → Relacionamento com Cliente → Relatórios
+ * Busca a pasta do cliente na raiz do Drive compartilhado usando fuzzy matching.
+ * NÃO cria a pasta — o cliente já deve existir no Drive.
  */
-async function ensureSharedDrivePath(drive: drive_v3.Drive): Promise<{ driveId: string; relatoriosFolderId: string }> {
-  const driveId = await findSharedDrive(drive, SHARED_DRIVE_NAME);
-  logger.info({ driveId }, `Drive compartilhado "${SHARED_DRIVE_NAME}" localizado`);
+async function findClientFolderInDrive(
+  drive: drive_v3.Drive,
+  driveId: string,
+  clientName: string
+): Promise<string> {
+  const q = `mimeType = 'application/vnd.google-apps.folder' and '${driveId}' in parents and trashed = false`;
 
-  let currentParentId = driveId;
-  for (const folderName of FOLDER_PATH) {
-    currentParentId = await findOrCreateFolderInDrive(drive, folderName, driveId, currentParentId);
+  logger.debug({ clientName, normalizedName: normalizeName(clientName) }, 'Buscando pasta do cliente na raiz do Drive');
+
+  const allFolders: drive_v3.Schema$File[] = [];
+  let pageToken: string | undefined;
+
+  do {
+    const listResponse = await drive.files.list({
+      q,
+      fields: 'nextPageToken, files(id, name)',
+      corpora: 'drive',
+      driveId,
+      includeItemsFromAllDrives: true,
+      supportsAllDrives: true,
+      pageSize: 100,
+      ...(pageToken ? { pageToken } : {})
+    });
+
+    if (listResponse.data.files) {
+      allFolders.push(...listResponse.data.files);
+    }
+    pageToken = listResponse.data.nextPageToken ?? undefined;
+  } while (pageToken);
+
+  const match = findBestMatch(allFolders, clientName);
+
+  if (match) {
+    logger.info(
+      { folderId: match.id, folderName: match.name, searchName: clientName, score: match.score },
+      `Pasta do cliente encontrada via fuzzy match (score ${match.score})`
+    );
+    return match.id;
   }
 
-  return { driveId, relatoriosFolderId: currentParentId };
+  throw new Error(
+    `Pasta do cliente "${clientName}" não encontrada na raiz do Drive compartilhado. ` +
+    `Pastas disponíveis: ${allFolders.map((f) => f.name).join(', ')}`
+  );
 }
 
 export async function uploadReportToDrive(
@@ -223,7 +257,7 @@ export async function uploadReportToDrive(
 
 /**
  * Garante a estrutura completa de pastas no Drive compartilhado:
- * Drive Clientes DPG / Relacionamento com Cliente / Relatórios / [Cliente] / [Ano]
+ * Drive Clientes DPG / [Cliente] (já existente) / Relacionamento com Cliente / Relatórios / [Ano]
  */
 export async function ensureClientFolder(
   auth: OAuth2Client,
@@ -232,10 +266,17 @@ export async function ensureClientFolder(
 ) {
   const drive = google.drive({ version: 'v3', auth });
 
-  const { driveId, relatoriosFolderId } = await ensureSharedDrivePath(drive);
+  const driveId = await findSharedDrive(drive, SHARED_DRIVE_NAME);
+  logger.info({ driveId }, `Drive compartilhado "${SHARED_DRIVE_NAME}" localizado`);
 
-  const clientFolderId = await findOrCreateFolderInDrive(drive, clientFolderName, driveId, relatoriosFolderId);
-  const yearFolderId = await findOrCreateFolderInDrive(drive, String(year), driveId, clientFolderId);
+  const clientFolderId = await findClientFolderInDrive(drive, driveId, clientFolderName);
+
+  let currentParentId = clientFolderId;
+  for (const folderName of SUBFOLDER_PATH) {
+    currentParentId = await findOrCreateFolderInDrive(drive, folderName, driveId, currentParentId);
+  }
+
+  const yearFolderId = await findOrCreateFolderInDrive(drive, String(year), driveId, currentParentId);
 
   return { clientFolderId, yearFolderId };
 }
