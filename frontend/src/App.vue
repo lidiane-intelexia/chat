@@ -67,7 +67,18 @@ async function submit() {
       body: JSON.stringify(payload)
     });
 
-    const data = await response.json();
+    const text = await response.text();
+    if (!text) {
+      throw new Error('Servidor retornou resposta vazia. A geração pode ter excedido o tempo limite.');
+    }
+
+    let data: any;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error('Resposta inválida do servidor. A geração pode ter excedido o tempo limite.');
+    }
+
     if (!response.ok) {
       throw new Error(data?.error || 'Falha ao gerar o relatório.');
     }

@@ -2,6 +2,7 @@
 import pLimit from 'p-limit';
 import { toRFC3339 } from '../utils/text.js';
 import { logger } from '../utils/logger.js';
+import { buildFieldMatchers, type ClientQuery } from './messageProcessor.js';
 import type { OAuth2Client } from 'google-auth-library';
 import type { GaxiosError } from 'gaxios';
 
@@ -154,4 +155,62 @@ export async function findMessagesAcrossSpaces(
   );
 
   return matches;
+}
+
+/**
+ * Busca mensagens de forma independente por cada campo do query (nome, CNPJ, email, phone, link).
+ * Cada campo gera uma busca separada e os resultados são unidos (UNION) com deduplicação por message.name.
+ */
+export async function findMatchingMessagesByField(
+  auth: OAuth2Client,
+  query: ClientQuery,
+  options: MessageSearchOptions & { threshold?: number } = {}
+) {
+  const matchers = buildFieldMatchers(query, options.threshold ?? 0.7);
+
+  if (!matchers.length) return [];
+
+  const spaces = await listAllSpaces(auth);
+  const limit = pLimit(options.concurrency ?? DEFAULT_CONCURRENCY);
+
+  // Coleta todas as mensagens de todos os spaces uma única vez
+  const allRecords: MessageRecord[] = [];
+
+  await Promise.all(
+    spaces.map((space) =>
+      limit(async () => {
+        if (!space.name) return;
+        try {
+          const messages = await listMessagesForSpace(auth, space.name, options);
+          for (const message of messages) {
+            allRecords.push({ space, message });
+          }
+        } catch (error) {
+          logger.warn({ err: error, space: space.name }, 'Failed to list messages for space');
+        }
+      })
+    )
+  );
+
+  // Aplica cada matcher independentemente e faz UNION com deduplicação
+  const seen = new Set<string>();
+  const results: MessageRecord[] = [];
+
+  for (const matcher of matchers) {
+    for (const record of allRecords) {
+      const messageId = record.message.name;
+      if (!messageId || seen.has(messageId)) continue;
+      if (matcher(record)) {
+        seen.add(messageId);
+        results.push(record);
+      }
+    }
+  }
+
+  logger.info(
+    { totalMessages: allRecords.length, matched: results.length, matcherCount: matchers.length },
+    'Busca independente por campo concluída'
+  );
+
+  return results;
 }
