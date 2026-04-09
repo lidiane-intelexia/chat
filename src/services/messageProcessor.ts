@@ -177,58 +177,122 @@ function isNegativeContext(messageText: string, query: ClientQuery): boolean {
   return false;
 }
 
-export function matchMessage(record: MessageRecord, query: ClientQuery, threshold = 0.7) {
-  const messageTextRaw = extractMessageText(record);
-  const messageText = normalizeText(messageTextRaw);
-  const messageDigits = digitsOnly(messageTextRaw);
-  const queryTokens = buildQueryTokens(query);
-  const linkTerms = buildLinkTerms(query.link);
+/**
+ * Verifica se a mensagem menciona o NOME do cliente.
+ * Usa tokenização + similaridade (Levenshtein) para tolerar variações.
+ */
+function matchByName(messageText: string, messageTextRaw: string, name: string, threshold: number): boolean {
+  const nameNorm = normalizeText(name);
 
-  // Hybrid search: if link matches, include this message regardless of other filters
-  if (linkTerms && matchByLink(messageTextRaw, linkTerms)) return true;
+  // Filtro de contexto negativo para nomes curtos/ambíguos
+  if (isNegativeContext(messageText, { name })) return false;
 
-  if (!queryTokens.length) return false;
+  // Match direto do nome completo como substring
+  if (messageText.includes(nameNorm)) return true;
 
-  // High precision mode (threshold >= 0.9): require full name match, not individual tokens
-  const highPrecision = threshold >= 0.9;
-
-  if (highPrecision && query.name) {
-    const fullNameNorm = normalizeText(query.name);
-    // Must contain the full client name as-is (not just individual tokens)
-    const hasFullName = messageText.includes(fullNameNorm);
-    const hasExactDigits = query.cnpj && messageDigits.includes(digitsOnly(query.cnpj));
-    const hasExactEmail = query.email && messageText.includes(normalizeText(query.email));
-    const hasExactPhone = query.phone && messageDigits.includes(digitsOnly(query.phone));
-
-    if (!hasFullName && !hasExactDigits && !hasExactEmail && !hasExactPhone) {
-      return false;
-    }
-  }
-
-  // Negative context filter: discard messages that use the search term generically
-  if (isNegativeContext(messageText, query)) {
-    return false;
-  }
-
-  // Standard matching
-  for (const token of queryTokens) {
-    if (!token) continue;
-    if (token.includes('@') && messageText.includes(token)) return true;
-    if (/^\d+$/.test(token) && messageDigits.includes(token)) return true;
+  // Match por tokens individuais do nome
+  const nameTokens = tokenize(name);
+  for (const token of nameTokens) {
     if (messageText.includes(token)) return true;
   }
 
+  // Fallback: similaridade por token
   const messageTokens = tokenize(messageTextRaw);
-  for (const token of queryTokens) {
-    if (token.length < 2 || token.includes('@') || /^\d+$/.test(token)) continue;
+  for (const token of nameTokens) {
+    if (token.length < 2) continue;
     for (const msgToken of messageTokens) {
-      if (similarityRatio(token, msgToken) >= threshold) {
-        return true;
-      }
+      if (similarityRatio(token, msgToken) >= threshold) return true;
     }
   }
 
   return false;
+}
+
+/**
+ * Verifica se a mensagem contém o CNPJ (apenas dígitos).
+ */
+function matchByCnpj(messageDigits: string, cnpj: string): boolean {
+  const cnpjDigits = digitsOnly(cnpj);
+  return cnpjDigits.length > 0 && messageDigits.includes(cnpjDigits);
+}
+
+/**
+ * Verifica se a mensagem contém o EMAIL.
+ */
+function matchByEmail(messageText: string, email: string): boolean {
+  const emailNorm = normalizeText(email);
+  return emailNorm.length > 0 && messageText.includes(emailNorm);
+}
+
+/**
+ * Verifica se a mensagem contém o TELEFONE (apenas dígitos).
+ */
+function matchByPhone(messageDigits: string, phone: string): boolean {
+  const phoneDigits = digitsOnly(phone);
+  return phoneDigits.length > 0 && messageDigits.includes(phoneDigits);
+}
+
+/**
+ * Cria uma lista de predicados independentes, um para cada campo fornecido.
+ * Cada predicado busca mensagens apenas pelo seu critério.
+ */
+export function buildFieldMatchers(query: ClientQuery, threshold = 0.7): Array<(record: MessageRecord) => boolean> {
+  const matchers: Array<(record: MessageRecord) => boolean> = [];
+
+  if (query.link) {
+    const linkTerms = buildLinkTerms(query.link)!;
+    matchers.push((record) => {
+      const messageTextRaw = extractMessageText(record);
+      return matchByLink(messageTextRaw, linkTerms);
+    });
+  }
+
+  if (query.name) {
+    const name = query.name;
+    matchers.push((record) => {
+      const messageTextRaw = extractMessageText(record);
+      const messageText = normalizeText(messageTextRaw);
+      return matchByName(messageText, messageTextRaw, name, threshold);
+    });
+  }
+
+  if (query.cnpj) {
+    const cnpj = query.cnpj;
+    matchers.push((record) => {
+      const messageTextRaw = extractMessageText(record);
+      const messageDigits = digitsOnly(messageTextRaw);
+      return matchByCnpj(messageDigits, cnpj);
+    });
+  }
+
+  if (query.email) {
+    const email = query.email;
+    matchers.push((record) => {
+      const messageTextRaw = extractMessageText(record);
+      const messageText = normalizeText(messageTextRaw);
+      return matchByEmail(messageText, email);
+    });
+  }
+
+  if (query.phone) {
+    const phone = query.phone;
+    matchers.push((record) => {
+      const messageTextRaw = extractMessageText(record);
+      const messageDigits = digitsOnly(messageTextRaw);
+      return matchByPhone(messageDigits, phone);
+    });
+  }
+
+  return matchers;
+}
+
+/**
+ * Aplica todos os matchers independentes a uma mensagem.
+ * Retorna true se QUALQUER matcher der match (lógica UNION).
+ */
+export function matchMessage(record: MessageRecord, query: ClientQuery, threshold = 0.7) {
+  const matchers = buildFieldMatchers(query, threshold);
+  return matchers.some((matcher) => matcher(record));
 }
 
 function buildTopics(records: MessageRecord[], limit = 10) {

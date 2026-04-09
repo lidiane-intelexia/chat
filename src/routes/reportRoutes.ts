@@ -2,8 +2,8 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { getAuthorizedClient } from '../auth/oauth.js';
-import { findMessagesAcrossSpaces } from '../services/chatService.js';
-import { matchMessage, type ClientQuery } from '../services/messageProcessor.js';
+import { findMatchingMessagesByField } from '../services/chatService.js';
+import type { ClientQuery } from '../services/messageProcessor.js';
 import { generateReport } from '../services/reportService.js';
 import { resolveAllIdentities } from '../services/aiService.js';
 import { ensureClientFolder, uploadReportToDrive } from '../services/driveService.js';
@@ -59,14 +59,15 @@ reportRouter.post('/', async (req, res, next) => {
       }
     });
 
-    // Faz a busca real no Google Chat, aplicando matchMessage e filtros de data.
-    const records = await findMessagesAcrossSpaces(
+    // Faz a busca real no Google Chat, buscando cada campo de forma independente e unindo os resultados.
+    const records = await findMatchingMessagesByField(
       auth,
-      (record) => matchMessage(record, query, threshold),
+      query,
       {
         startDate: payload.startDate,
         endDate: payload.endDate,
-        concurrency: payload.concurrency
+        concurrency: payload.concurrency,
+        threshold
       }
     );
 
@@ -91,11 +92,13 @@ reportRouter.post('/', async (req, res, next) => {
     const year = Number.isNaN(periodEnd.getTime()) ? new Date().getFullYear() : periodEnd.getFullYear();
 
     // Define o nome da pasta do cliente priorizando o CNPJ, quando disponivel.
-    const clientFolderName = sanitizeFolderName(query.cnpj || reportOutput.report.clientLabel);
+    // Usa o valor original (sem sanitizar) para busca fuzzy no Drive.
+    const clientSearchName = query.cnpj || reportOutput.report.clientLabel;
     // Garante a pasta do cliente dentro de 'chat' e a subpasta do ano.
-    const { yearFolderId } = await ensureClientFolder(auth, clientFolderName, year);
+    const { yearFolderId } = await ensureClientFolder(auth, clientSearchName, year);
 
-    const fileName = `Relatorio-${clientFolderName}-${year}.${format === 'pdf' ? 'pdf' : 'gdoc'}`;
+    const safeClientName = sanitizeFolderName(clientSearchName);
+    const fileName = `Relatorio-${safeClientName}-${year}.${format === 'pdf' ? 'pdf' : 'gdoc'}`;
 
     // Envia o arquivo final para a subpasta do ano correta no Drive.
     const upload = await uploadReportToDrive(auth, {
