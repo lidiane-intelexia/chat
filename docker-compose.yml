@@ -18,7 +18,7 @@ services:
       retries: 5
 
   app:
-    image: ghcr.io/lidiane-intelexia/chat-report-app:latest
+    image: lidianeintelexia/chat-report-app:latest
     depends_on:
       - db
     environment:
