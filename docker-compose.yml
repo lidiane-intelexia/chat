@@ -24,7 +24,7 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/chat_reports?schema=public
     ports:
-      - "3000:3000"
+      - "3001:3000"
     volumes:
       - ./data:/app/data
 
