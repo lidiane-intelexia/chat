@@ -26,7 +26,7 @@ services:
     ports:
       - "3001:3000"
     volumes:
-      - ./data:/app/data
+      - appdata:/app/data
 
   pgadmin:
     image: dpage/pgadmin4:latest
@@ -43,3 +43,4 @@ services:
 volumes:
   pgdata:
   pgadmin:
+  appdata:
