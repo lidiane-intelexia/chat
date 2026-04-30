@@ -1,5 +1,3 @@
-// Prisma schema for PostgreSQL
-
 generator client {
   provider = "prisma-client-js"
 }
