@@ -35,6 +35,13 @@ ENV DATABASE_URL="postgresql://johndoe:randompassword@localhost:5432/mydb?schema
 RUN npm run prisma:generate
 RUN npm run build
 
+FROM node:20-slim AS frontend-build
+WORKDIR /app/frontend
+COPY frontend/package*.json ./
+RUN npm ci
+COPY frontend ./
+RUN npm run build
+
 FROM node:20-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
@@ -64,6 +71,7 @@ ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma
+COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 COPY package.json ./
 EXPOSE 3000
 CMD ["node", "dist/index.js"]

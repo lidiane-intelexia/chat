@@ -1,4 +1,6 @@
 ﻿import 'dotenv/config';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { pinoHttp } from 'pino-http';
 import { env } from './config/env.js';
@@ -6,6 +8,10 @@ import { logger } from './utils/logger.js';
 import { authRouter } from './routes/authRoutes.js';
 import { reportRouter } from './routes/reportRoutes.js';
 import { errorHandler } from './middleware/errorHandler.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const frontendDist = path.resolve(__dirname, '../frontend/dist');
 
 const app = express();
 
@@ -19,6 +25,10 @@ app.get('/health', (_req, res) => {
 app.use('/auth', authRouter);
 app.use('/reports', reportRouter);
 
+app.use(express.static(frontendDist));
+app.get('*', (_req, res) => {
+  res.sendFile(path.join(frontendDist, 'index.html'));
+});
 
 app.use(errorHandler);
 
