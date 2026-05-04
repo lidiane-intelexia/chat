@@ -28,6 +28,7 @@ RUN npm ci
 
 FROM deps AS build
 COPY tsconfig.json ./
+COPY prisma.config.ts ./
 COPY src ./src
 COPY prisma ./prisma
 ENV DATABASE_URL="postgresql://johndoe:randompassword@localhost:5432/mydb?schema=public"
