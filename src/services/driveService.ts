@@ -2,6 +2,7 @@ import { google, drive_v3 } from 'googleapis';
 import type { OAuth2Client } from 'google-auth-library';
 import { Readable } from 'node:stream';
 import { logger } from '../utils/logger.js';
+import { AppError } from '../errors/AppError.js';
 
 export interface UploadResult {
   fileId: string;
@@ -93,9 +94,15 @@ async function findSharedDrive(drive: drive_v3.Drive, name: string): Promise<str
     pageToken = res.data.nextPageToken ?? undefined;
   } while (pageToken);
 
-  throw new Error(
-    `Drive compartilhado "${name}" não encontrado. ` +
-    `Verifique se a conta autenticada tem acesso ao drive compartilhado.`
+  logger.warn(
+    { sharedDriveName: name },
+    'Drive compartilhado nao encontrado para a conta autenticada'
+  );
+
+  throw new AppError(
+    500,
+    'Não foi possível acessar o Google Drive compartilhado. ' +
+    'Contate o administrador para verificar a autorização da conta de serviço.'
   );
 }
 
@@ -206,9 +213,20 @@ async function findClientFolderInDrive(
     return match.id;
   }
 
-  throw new Error(
-    `Pasta do cliente "${clientName}" não encontrada na raiz do Drive compartilhado. ` +
-    `Pastas disponíveis: ${allFolders.map((f) => f.name).join(', ')}`
+  logger.warn(
+    {
+      clientName,
+      normalizedClientName: normalizeName(clientName),
+      availableFolderCount: allFolders.length,
+      availableFolders: allFolders.map((f) => f.name)
+    },
+    'Pasta do cliente nao encontrada no Drive'
+  );
+
+  throw new AppError(
+    404,
+    `Pasta do cliente "${clientName}" não localizada no Google Drive. ` +
+    `Verifique se o nome do cliente no formulário coincide com o nome da pasta no Drive.`
   );
 }
 

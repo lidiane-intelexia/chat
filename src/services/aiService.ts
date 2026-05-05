@@ -267,13 +267,34 @@ export async function analyzeWithAI(rawLog: string, records: MessageRecord[], op
 
   const fullInstruction = SYSTEM_INSTRUCTION + contextInstruction;
 
-  const response = await ai.models.generateContent({
-    model: env.GEMINI_MODEL,
-    config: {
-      systemInstruction: fullInstruction,
-    },
-    contents: cleanedLog,
-  });
+  const response = await callGeminiWithRetry(() =>
+    ai.models.generateContent({
+      model: env.GEMINI_MODEL,
+      config: {
+        systemInstruction: fullInstruction,
+      },
+      contents: cleanedLog,
+    })
+  );
 
   return response.text ?? '';
+}
+
+async function callGeminiWithRetry<T>(fn: () => Promise<T>, attempts = 3): Promise<T> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      const status = (err as { status?: number; error?: { code?: number } })?.status
+        ?? (err as { error?: { code?: number } })?.error?.code;
+      const isTransient = status === 503 || status === 429;
+      if (!isTransient || i === attempts - 1) throw err;
+      const delayMs = 1000 * Math.pow(i + 1, 2);
+      logger.warn({ status, attempt: i + 1, delayMs }, 'Gemini transitorio, retentando');
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+  }
+  throw lastErr;
 }
