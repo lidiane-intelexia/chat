@@ -17,17 +17,23 @@ model Client {
 }
 
 model Report {
-  id          String   @id @default(cuid())
-  driveFileId String
-  driveLink   String
-  summary     Json
-  generatedAt DateTime @default(now())
-  clientId    String
-  client      Client   @relation(fields: [clientId], references: [id])
+  id               String   @id @default(cuid())
+  driveFileId      String
+  driveLink        String
+  summary          Json
+  generatedAt      DateTime @default(now())
+  clientId         String
+  client           Client   @relation(fields: [clientId], references: [id])
+  generatedByEmail String?
+
+  @@index([generatedByEmail])
 }
 
 model SearchLog {
-  id        String   @id @default(cuid())
-  term      String
-  createdAt DateTime @default(now())
+  id              String   @id @default(cuid())
+  term            String
+  createdAt       DateTime @default(now())
+  searchedByEmail String?
+
+  @@index([searchedByEmail])
 }

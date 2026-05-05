@@ -46,6 +46,7 @@ export const reportRouter = Router();
 // Define a rota principal (POST /) e usa async para nao travar enquanto espera as APIs do Google.
 reportRouter.post('/', async (req, res, next) => {
   try {
+    const userEmail = req.user!.email;
     // Valida os dados do usuario; se estiverem invalidos, lanca erro e cai no catch.
     const payload = requestSchema.parse(req.body);
     const query = payload.query as ClientQuery;
@@ -55,7 +56,8 @@ reportRouter.post('/', async (req, res, next) => {
 
     await prisma.searchLog.create({
       data: {
-        term: buildSearchTerm(query)
+        term: buildSearchTerm(query),
+        searchedByEmail: userEmail
       }
     });
 
@@ -154,7 +156,8 @@ reportRouter.post('/', async (req, res, next) => {
         clientId: client.id,
         driveFileId: upload.fileId,
         driveLink,
-        summary
+        summary,
+        generatedByEmail: userEmail
       }
     });
 

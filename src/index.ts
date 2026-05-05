@@ -8,6 +8,7 @@ import { logger } from './utils/logger.js';
 import { authRouter } from './routes/authRoutes.js';
 import { reportRouter } from './routes/reportRoutes.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import { requireAuth } from './middleware/requireAuth.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,7 +24,7 @@ app.get('/health', (_req, res) => {
 });
 
 app.use('/auth', authRouter);
-app.use('/reports', reportRouter);
+app.use('/reports', requireAuth, reportRouter);
 
 app.use(express.static(frontendDist));
 app.use((req, res, next) => {
