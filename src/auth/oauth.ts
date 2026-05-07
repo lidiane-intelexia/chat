@@ -1,8 +1,9 @@
-﻿import { google } from 'googleapis';
+﻿import type { Auth } from 'googleapis';
 import { env } from '../config/env.js';
-import { tokenStore } from '../storage/tokenStore.js';
+import { tokenStore, type StoredTokens } from '../storage/tokenStore.js';
+import { createGoogleOAuthClient } from './googleClient.js';
 
-//* Contém a lógica de Autenticação via OAuth2 para acessar as APIs do Google, como Chat e Drive.
+//* Contem a logica de Autenticacao via OAuth2 para acessar as APIs do Google, como Chat e Drive.
 
 
 export const CHAT_SCOPES = [
@@ -27,16 +28,25 @@ function getMissingScopes(scopeList?: string | null): string[] {
   return ALL_SCOPES.filter((scope) => !granted.has(scope));
 }
 
-
-export function createOAuthClient() {
-  return new google.auth.OAuth2(
-    env.GOOGLE_CLIENT_ID,
-    env.GOOGLE_CLIENT_SECRET,
-    env.GOOGLE_REDIRECT_URI
-  );
+// Converte StoredTokens (que aceita `null` por compatibilidade com o que o
+// Google as vezes devolve) para o formato Auth.Credentials esperado pelo
+// OAuth2Client (string | undefined). Mantemos a tipagem completa em vez do
+// antigo cast `any`.
+function toCredentials(tokens: StoredTokens): Auth.Credentials {
+  const credentials: Auth.Credentials = {};
+  if (tokens.access_token != null) credentials.access_token = tokens.access_token;
+  if (tokens.refresh_token != null) credentials.refresh_token = tokens.refresh_token;
+  if (tokens.scope != null) credentials.scope = tokens.scope;
+  if (tokens.token_type != null) credentials.token_type = tokens.token_type;
+  if (tokens.expiry_date != null) credentials.expiry_date = tokens.expiry_date;
+  return credentials;
 }
 
-export function getAuthUrl() {
+export function createOAuthClient(): Auth.OAuth2Client {
+  return createGoogleOAuthClient(env.GOOGLE_REDIRECT_URI);
+}
+
+export function getAuthUrl(): string {
   const client = createOAuthClient();
   return client.generateAuthUrl({
     access_type: 'offline',
@@ -60,7 +70,7 @@ export async function setTokensFromCode(code: string): Promise<void> {
   });
 }
 
-export async function getAuthorizedClient() {
+export async function getAuthorizedClient(): Promise<Auth.OAuth2Client> {
   const client = createOAuthClient();
   const tokens = await tokenStore.getTokens();
   if (!tokens) {
@@ -69,27 +79,18 @@ export async function getAuthorizedClient() {
   const missingScopes = getMissingScopes(tokens.scope);
   if (missingScopes.length > 0) {
     throw new Error(
-      `Tokens sem os escopos necessários. Reautorize via /auth/url. ` +
+      `Tokens sem os escopos necessarios. Reautorize via /auth/url. ` +
       `Escopos faltando: ${missingScopes.join(', ')}`
     );
   }
-  // `tokens` may contain `null` values, which the google client doesn't expect
-  // (it uses `string | undefined`). the easiest fix is to cast to `any` after
-  // stripping out explicit nulls.
-  const safeCredentials: any = { ...tokens };
-  for (const key of Object.keys(safeCredentials)) {
-    if (safeCredentials[key] === null) delete safeCredentials[key];
-  }
-  client.setCredentials(safeCredentials);
+  client.setCredentials(toCredentials(tokens));
   await client.getAccessToken();
 
-  const mergedTokens = {
+  const mergedTokens: StoredTokens = {
     ...tokens,
     ...client.credentials,
     refresh_token: client.credentials.refresh_token ?? tokens.refresh_token
   };
-  // the `StoredTokens` interface now permits null values, so this assignment
-  // is safe without a cast. we still return the client for convenience.
   await tokenStore.setTokens(mergedTokens);
   return client;
 }

@@ -92,15 +92,6 @@ function extractUsernameFromLink(link: string): string | null {
   }
 }
 
-function buildQueryTokens(query: ClientQuery) {
-  const tokens: string[] = [];
-  if (query.name) tokens.push(...tokenize(query.name));
-  if (query.email) tokens.push(normalizeText(query.email));
-  if (query.cnpj) tokens.push(digitsOnly(query.cnpj));
-  if (query.phone) tokens.push(digitsOnly(query.phone));
-  return tokens.filter(Boolean);
-}
-
 /**
  * Builds link-specific search terms from the provided URL.
  * Returns the full URL (normalized) and the extracted username for @mention matching.

@@ -6,3 +6,10 @@ node_modules/
 dist/
 .vite/
 .docker/
+.claude/
+CLAUDE.md
+
+# BMAD
+_bmad-output/
+_bmad/custom/config.user.toml
+_bmad/
