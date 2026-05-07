@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  backend:
+    name: Backend (typecheck, test, build)
+    runs-on: ubuntu-latest
+
+    env:
+      # Variaveis usadas apenas para satisfazer o schema Zod no boot.
+      # Nao sao credenciais reais - so passam pela validacao em testes/build.
+      NODE_ENV: test
+      DATABASE_URL: postgresql://test:test@localhost:5432/test
+      GOOGLE_CLIENT_ID: ci-client-id
+      GOOGLE_CLIENT_SECRET: ci-client-secret
+      GOOGLE_REDIRECT_URI: http://localhost:3000/auth/callback
+      GOOGLE_LOGIN_REDIRECT_URI: http://localhost:3000/auth/login/callback
+      SESSION_SECRET: ci-session-secret-must-be-at-least-32-chars-long-xx
+      GEMINI_API_KEY: ci-gemini-key
+      ALLOWED_HD: example.com
+      LOG_LEVEL: silent
+      # Evita baixar Chromium (Puppeteer) durante o npm ci da CI.
+      PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: 'true'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npm run prisma:generate
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+  frontend:
+    name: Frontend (build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build

@@ -360,9 +360,12 @@ function parseMarkdownSections(text: string): ParsedSection[] {
   }
 
   for (let i = 0; i < matches.length; i++) {
-    const title = (matches[i][1] || matches[i][2]).trim();
-    const start = matches[i].index! + matches[i][0].length;
-    const end = i + 1 < matches.length ? matches[i + 1].index! : text.length;
+    const match = matches[i];
+    if (!match) continue;
+    const title = (match[1] ?? match[2] ?? '').trim();
+    const start = (match.index ?? 0) + (match[0]?.length ?? 0);
+    const next = matches[i + 1];
+    const end = next?.index ?? text.length;
     const content = text.slice(start, end).trim();
     sections.push({ title, content });
   }
@@ -414,7 +417,7 @@ function extractField(text: string, label: string): string {
   const regex = new RegExp(`\\*?\\*?${label}\\*?\\*?\\s*:\\s*(.+?)(?:\\n|$)`, 'i');
   const match = text.match(regex);
   if (!match) return '';
-  let value = match[1].trim().replace(/\*\*/g, '');
+  let value = (match[1] ?? '').trim().replace(/\*\*/g, '');
   // Unwrap brackets from dates: [14/06/2023 - 10:14:38] -> 14/06/2023 - 10:14:38
   value = value.replace(/^\[(.+)\]$/, '$1');
   return value;
@@ -528,17 +531,19 @@ function buildRawLogHtml(content: string): string {
   for (const line of lines) {
     const match = line.match(/^\[(.+?)\]\s*\[?([^\]:]+?)\]?\s*:\s*(.*)$/);
     if (match) {
-      const rawDateTime = match[1].trim();
+      const rawDateTime = (match[1] ?? '').trim();
       const dtParts = rawDateTime.split(/\s*[-,]\s*/);
       const datePart = dtParts[0] || rawDateTime;
-      const timePart = dtParts[1] || '';
+      const timePart = dtParts[1] ?? '';
+      const sender = (match[2] ?? '').trim();
+      const message = match[3] ?? '';
 
       html += `<div class="log-entry">
         <div class="log-header">
           <span class="log-date">[${escapeHtml(datePart)} | ${escapeHtml(timePart)}]</span>
-          <span class="log-sender">${escapeHtml(match[2].trim())}:</span>
+          <span class="log-sender">${escapeHtml(sender)}:</span>
         </div>
-        <div class="log-message">${escapeHtml(match[3])}</div>
+        <div class="log-message">${escapeHtml(message)}</div>
       </div>`;
     } else {
       html += `<div class="log-entry">

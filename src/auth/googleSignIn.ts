@@ -1,5 +1,5 @@
-import { google, type Auth } from 'googleapis';
 import { env } from '../config/env.js';
+import { createGoogleOAuthClient } from './googleClient.js';
 
 const LOGIN_SCOPES = ['openid', 'email', 'profile'];
 
@@ -11,12 +11,8 @@ export interface GoogleProfile {
   picture?: string;
 }
 
-function createLoginClient(): Auth.OAuth2Client {
-  return new google.auth.OAuth2(
-    env.GOOGLE_CLIENT_ID,
-    env.GOOGLE_CLIENT_SECRET,
-    env.GOOGLE_LOGIN_REDIRECT_URI
-  );
+function createLoginClient() {
+  return createGoogleOAuthClient(env.GOOGLE_LOGIN_REDIRECT_URI);
 }
 
 export function getLoginUrl(state: string): string {
