@@ -17,6 +17,10 @@ interface FolderMatch {
 
 const SHARED_DRIVE_NAME = 'Drive Clientes DPG';
 const SUBFOLDER_PATH = ['Relacionamento com Cliente', 'Relatórios'];
+// Pasta-inbox para relatorios cuja pasta do cliente nao existe no Drive.
+// O underline forca ela a ficar no topo da listagem alfabetica — sinal visual
+// de "requer triagem manual".
+const PENDING_FOLDER_NAME = '_Sem-Pasta';
 
 /**
  * Normaliza um nome para comparação fuzzy:
@@ -171,13 +175,14 @@ async function findOrCreateFolderInDrive(
 
 /**
  * Busca a pasta do cliente na raiz do Drive compartilhado usando fuzzy matching.
- * NÃO cria a pasta — o cliente já deve existir no Drive.
+ * NUNCA cria a pasta automaticamente. Quando nao encontra, retorna null —
+ * cabe ao chamador decidir se aborta ou usa um caminho de fallback.
  */
 async function findClientFolderInDrive(
   drive: drive_v3.Drive,
   driveId: string,
   clientName: string
-): Promise<string> {
+): Promise<string | null> {
   const q = `mimeType = 'application/vnd.google-apps.folder' and '${driveId}' in parents and trashed = false`;
 
   logger.debug({ clientName, normalizedName: normalizeName(clientName) }, 'Buscando pasta do cliente na raiz do Drive');
@@ -217,17 +222,12 @@ async function findClientFolderInDrive(
     {
       clientName,
       normalizedClientName: normalizeName(clientName),
-      availableFolderCount: allFolders.length,
-      availableFolders: allFolders.map((f) => f.name)
+      availableFolderCount: allFolders.length
     },
-    'Pasta do cliente nao encontrada no Drive'
+    'Pasta do cliente nao encontrada no Drive — chamador deve usar fallback'
   );
 
-  throw new AppError(
-    404,
-    `Pasta do cliente "${clientName}" não localizada no Google Drive. ` +
-    `Verifique se o nome do cliente no formulário coincide com o nome da pasta no Drive.`
-  );
+  return null;
 }
 
 export async function uploadReportToDrive(
@@ -274,20 +274,39 @@ export async function uploadReportToDrive(
 }
 
 /**
- * Garante a estrutura completa de pastas no Drive compartilhado:
- * Drive Clientes DPG / [Cliente] (já existente) / Relacionamento com Cliente / Relatórios / [Ano]
+ * Resolve a pasta-destino do relatorio no Drive compartilhado.
+ *
+ * Caminho feliz (location = 'client'):
+ *   Drive Clientes DPG / [Cliente] / Relacionamento com Cliente / Relatorios / [Ano]
+ *
+ * Caminho de fallback (location = 'pending') — quando a pasta do cliente NAO
+ * existe no Drive:
+ *   Drive Clientes DPG / _Sem-Pasta / [Ano]
+ *
+ * Garantia: nunca lanca por "pasta do cliente inexistente". Pasta do cliente
+ * NUNCA e criada automaticamente — typos virariam pastas duplicadas.
  */
 export async function ensureClientFolder(
   auth: OAuth2Client,
   clientFolderName: string,
   year: number
-) {
+): Promise<{ yearFolderId: string; location: 'client' | 'pending' }> {
   const drive = google.drive({ version: 'v3', auth });
 
   const driveId = await findSharedDrive(drive, SHARED_DRIVE_NAME);
   logger.info({ driveId }, `Drive compartilhado "${SHARED_DRIVE_NAME}" localizado`);
 
   const clientFolderId = await findClientFolderInDrive(drive, driveId, clientFolderName);
+
+  if (clientFolderId === null) {
+    logger.warn(
+      { clientFolderName, fallback: PENDING_FOLDER_NAME, year },
+      `Cliente sem pasta no Drive — relatorio sera salvo em fallback "${PENDING_FOLDER_NAME}/${year}"`
+    );
+    const pendingFolderId = await findOrCreateFolderInDrive(drive, PENDING_FOLDER_NAME, driveId, driveId);
+    const yearFolderId = await findOrCreateFolderInDrive(drive, String(year), driveId, pendingFolderId);
+    return { yearFolderId, location: 'pending' };
+  }
 
   let currentParentId = clientFolderId;
   for (const folderName of SUBFOLDER_PATH) {
@@ -296,5 +315,5 @@ export async function ensureClientFolder(
 
   const yearFolderId = await findOrCreateFolderInDrive(drive, String(year), driveId, currentParentId);
 
-  return { clientFolderId, yearFolderId };
+  return { yearFolderId, location: 'client' };
 }

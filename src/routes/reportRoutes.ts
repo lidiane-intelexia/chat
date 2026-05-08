@@ -96,8 +96,10 @@ reportRouter.post('/', async (req, res, next) => {
     // Define o nome da pasta do cliente priorizando o CNPJ, quando disponivel.
     // Usa o valor original (sem sanitizar) para busca fuzzy no Drive.
     const clientSearchName = query.cnpj || reportOutput.report.clientLabel;
-    // Garante a pasta do cliente dentro de 'chat' e a subpasta do ano.
-    const { yearFolderId } = await ensureClientFolder(auth, clientSearchName, year);
+    // Resolve a pasta-destino do relatorio no Drive. Quando a pasta do cliente
+    // nao existe, ensureClientFolder cai no fallback "_Sem-Pasta/<ano>" sem
+    // lancar — o relatorio sempre e salvo em algum lugar do Drive.
+    const { yearFolderId, location: driveLocation } = await ensureClientFolder(auth, clientSearchName, year);
 
     const safeClientName = sanitizeFolderName(clientSearchName);
     const fileName = `Relatorio-${safeClientName}-${year}.${format === 'pdf' ? 'pdf' : 'gdoc'}`;
@@ -162,11 +164,18 @@ reportRouter.post('/', async (req, res, next) => {
     });
 
     // Resposta final com link, ID e resumo do processamento.
+    // Quando driveLocation === 'pending', inclui aviso ao usuario de que o
+    // relatorio foi salvo na pasta-inbox _Sem-Pasta porque a pasta do cliente
+    // nao existe no Drive.
     res.json({
       status: 'ok',
       fileId: upload.fileId,
       webViewLink: driveLink,
       downloadLink,
+      driveLocation,
+      ...(driveLocation === 'pending' && {
+        warning: `Pasta do cliente '${clientSearchName}' não encontrada no Drive. Relatório salvo em _Sem-Pasta`
+      }),
       summary: {
         client: summary.client,
         periodStart: summary.periodStart,
