@@ -9,7 +9,7 @@ dist/
 .claude/
 CLAUDE.md
 
-# BMAD
+# BMAD — framework ignorado, exceto specs (CLAUDE.md regra 1: spec-first em _bmad/)
 _bmad-output/
-_bmad/custom/config.user.toml
-_bmad/
+_bmad/*
+!_bmad/specs/

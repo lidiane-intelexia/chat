@@ -11,6 +11,8 @@ type ReportRow = {
   participants: number;
   generatedAt: string;
   format: 'pdf' | 'gdoc';
+  driveLocation: 'client' | 'pending';
+  warning?: string;
 };
 
 const apiBase = import.meta.env.VITE_API_URL || '';
@@ -136,7 +138,9 @@ async function submit() {
       totalMessages: data.summary.totalMessages,
       participants: data.summary.participants,
       generatedAt: new Date().toLocaleString('pt-BR'),
-      format: form.format
+      format: form.format,
+      driveLocation: data.driveLocation ?? 'client',
+      warning: data.warning
     });
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Erro inesperado ao gerar o relatório.';
@@ -334,6 +338,12 @@ async function submit() {
                     <td class="px-4 py-3">
                       <p class="text-white font-medium">{{ report.client }}</p>
                       <p class="text-xs text-slate-400">{{ report.generatedAt }} · {{ report.format.toUpperCase() }}</p>
+                      <p
+                        v-if="report.warning"
+                        class="text-xs text-amber-300 mt-2 px-2 py-1.5 rounded-md bg-amber-500/15 border border-amber-500/40"
+                      >
+                        {{ report.warning }}
+                      </p>
                     </td>
                     <td class="px-4 py-3 text-slate-300">{{ report.period }}</td>
                     <td class="px-4 py-3 text-slate-300">
