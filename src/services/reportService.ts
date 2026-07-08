@@ -1,8 +1,9 @@
 import puppeteer from 'puppeteer';
-import { buildReportData } from './messageProcessor.js';
+import { buildReportData, sanitizeMessages } from './messageProcessor.js';
 import type { ClientQuery, ReportData } from './messageProcessor.js';
 import type { MessageRecord } from './chatService.js';
 import { analyzeWithAI, type AnalyzeOptions } from './aiService.js';
+import { logger } from '../utils/logger.js';
 
 export interface ReportOutput {
   report: ReportData;
@@ -590,11 +591,8 @@ function buildHtml(text: string, report: ReportData): string {
           </div>
         </div>`;
     } else if (section.title === 'RELATORIO BRUTO COMPLETO') {
-      body += `
-        <div class="section raw-log">
-          <div class="section-title">${escapeHtml(section.title)}</div>
-          ${buildRawLogHtml(section.content)}
-        </div>`;
+      // Ignora eventual eco da IA — o anexo bruto e sempre montado pelo codigo abaixo.
+      continue;
     } else {
       body += `
         <div class="section">
@@ -605,6 +603,19 @@ function buildHtml(text: string, report: ReportData): string {
         </div>`;
     }
   }
+
+  // Anexo bruto deterministico: montado da timeline ja sanitizada, no mesmo
+  // formato de linha que buildReportText produz, e nao mais ecoado pela IA.
+  const rawLogContent = report.timeline.length
+    ? report.timeline
+        .map((entry) => `[${formatDateTimePrecise(entry.time)}] [${entry.sender}]: ${entry.text}`)
+        .join('\n')
+    : '';
+  body += `
+    <div class="section raw-log">
+      <div class="section-title">RELATORIO BRUTO COMPLETO</div>
+      ${buildRawLogHtml(rawLogContent)}
+    </div>`;
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -668,9 +679,11 @@ export async function generateReport(
   nameMap?: Map<string, string>,
   analyzeOptions?: AnalyzeOptions
 ) {
-  const report = buildReportData(records, query, nameMap);
+  const { records: clean, stats } = sanitizeMessages(records);
+  logger.info({ ...stats }, 'sanitizacao de mensagens do relatorio');
+  const report = buildReportData(clean, query, nameMap);
   const rawText = buildReportText(report);
-  const text = await analyzeWithAI(rawText, records, analyzeOptions);
+  const text = await analyzeWithAI(rawText, clean, analyzeOptions);
   const pdf = format === 'pdf' ? await renderPdf(text, report) : undefined;
 
   return { report, text, pdf } satisfies ReportOutput;
