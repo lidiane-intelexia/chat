@@ -323,6 +323,63 @@ function extractItems(text: string, patterns: RegExp[], type: ActionItem['type']
   return items;
 }
 
+export interface SanitizeStats {
+  input: number;
+  droppedTestOnly: number;
+  droppedDuplicate: number;
+  output: number;
+}
+
+/** Casa exatamente "teste" ou "testes" isolados (apos normalizeText). */
+const TEST_ONLY_REGEX = /^testes?$/;
+
+/**
+ * Limpa a materia-prima do relatorio de forma deterministica, antes da IA.
+ * Duas regras puras, nesta ordem:
+ *   1. dropTestOnly  — descarta mensagens cujo texto normalizado e exatamente
+ *      "teste"/"testes". NAO descarta texto que apenas contenha a palavra, nem
+ *      mensagens sem texto (anexos carregam sinal).
+ *   2. dedupExact    — para texto normalizado nao-vazio, mantem a primeira
+ *      ocorrencia e descarta repeticoes identicas. Mensagens sem texto nunca
+ *      sao deduplicadas.
+ * Conservador por padrao: na duvida, mantem a mensagem.
+ */
+export function sanitizeMessages(records: MessageRecord[]): { records: MessageRecord[]; stats: SanitizeStats } {
+  const stats: SanitizeStats = {
+    input: records.length,
+    droppedTestOnly: 0,
+    droppedDuplicate: 0,
+    output: 0
+  };
+
+  const seen = new Set<string>();
+  const clean: MessageRecord[] = [];
+
+  for (const record of records) {
+    const normalized = normalizeText(safeText(record.message.text));
+
+    // Regra 1: descarta "teste"/"testes" isolados (somente texto nao-vazio).
+    if (normalized && TEST_ONLY_REGEX.test(normalized)) {
+      stats.droppedTestOnly++;
+      continue;
+    }
+
+    // Regra 2: dedup exato por conteudo normalizado nao-vazio.
+    if (normalized) {
+      if (seen.has(normalized)) {
+        stats.droppedDuplicate++;
+        continue;
+      }
+      seen.add(normalized);
+    }
+
+    clean.push(record);
+  }
+
+  stats.output = clean.length;
+  return { records: clean, stats };
+}
+
 export function buildReportData(records: MessageRecord[], query: ClientQuery, nameMap?: Map<string, string>): ReportData {
   const sorted = [...records].sort((a, b) => {
     const timeA = new Date(a.message.createTime || 0).getTime();

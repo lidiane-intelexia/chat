@@ -68,17 +68,7 @@ REGRAS DE FORMATACAO:
 - Onde aparecer "Espaco" ou nome generico de grupo, substitua pelo nome real do grupo de chat que aparece no log (ex: "Operacional Intelexia", "Suporte Tecnico", etc).
 - Se um participante nao tiver nome identificavel em nenhum lugar do log, use o formato "Membro #N" (onde N e um numero sequencial).
 
-Ao final, insira:
-
----
-
-**[RELATORIO BRUTO COMPLETO]**
-Anexe o log completo original formatado como tabela de log tecnica.
-Preserve SEMPRE o horario exato [HH:mm:ss] da mensagem original.
-Use estritamente este formato para cada linha:
-[DD/MM/AAAA - HH:mm:ss] [NOME DO USUARIO]: MENSAGEM
-
-Nunca omita ou arredonde horarios. Nunca use "Desconhecido" se houver um nome disponivel no log.`;
+NAO anexe o log bruto completo ao final. O anexo "[RELATORIO BRUTO COMPLETO]" e montado deterministicamente pelo codigo (a partir da timeline ja sanitizada), nao pela IA. Concentre-se apenas na sintese e redacao das secoes acima.`;
 
 const ai = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
 
