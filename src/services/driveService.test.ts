@@ -40,10 +40,40 @@ describe('normalizeName', () => {
   });
 });
 
+describe('ensureClientFolder — nome do Drive compartilhado', () => {
+  // Regressao: o Drive real chama-se "DRIVE de CLIENTES da DPG". A constante
+  // SHARED_DRIVE_NAME precisa casar com esse nome apos normalizeName, senao o
+  // app lanca "Nao foi possivel acessar o Google Drive compartilhado".
+  it('localiza o Drive real "DRIVE de CLIENTES da DPG"', async () => {
+    mockDrivesList.mockResolvedValueOnce({
+      data: { drives: [{ id: 'drive-1', name: 'DRIVE de CLIENTES da DPG' }] }
+    });
+    mockFilesList
+      .mockResolvedValueOnce({ data: { files: [{ id: 'cli-1', name: 'Cliente X' }] } })
+      .mockResolvedValueOnce({ data: { files: [{ id: 'rc-1', name: 'Relacionamento com Cliente' }] } })
+      .mockResolvedValueOnce({ data: { files: [{ id: 'rel-1', name: 'Relatórios' }] } })
+      .mockResolvedValueOnce({ data: { files: [{ id: 'year-1', name: '2026' }] } });
+
+    const result = await ensureClientFolder(fakeAuth, 'Cliente X', 2026);
+
+    expect(result).toEqual({ yearFolderId: 'year-1', location: 'client' });
+  });
+
+  it('lanca AppError quando nenhum Drive compartilhado casa com o nome', async () => {
+    mockDrivesList.mockResolvedValueOnce({
+      data: { drives: [{ id: 'outro', name: 'Outro Drive Qualquer' }] }
+    });
+
+    await expect(ensureClientFolder(fakeAuth, 'Cliente X', 2026)).rejects.toThrow(
+      /Google Drive compartilhado/i
+    );
+  });
+});
+
 describe('ensureClientFolder — pasta do cliente encontrada', () => {
   it('retorna yearFolderId e location=client quando match exato', async () => {
     mockDrivesList.mockResolvedValueOnce({
-      data: { drives: [{ id: 'drive-1', name: 'Drive Clientes DPG' }] }
+      data: { drives: [{ id: 'drive-1', name: 'DRIVE de CLIENTES da DPG' }] }
     });
     // Sequencia esperada de files.list:
     // 1) raiz do drive — busca da pasta do cliente
@@ -65,7 +95,7 @@ describe('ensureClientFolder — pasta do cliente encontrada', () => {
 
   it('aceita match fuzzy (prefixo numerico no nome da pasta)', async () => {
     mockDrivesList.mockResolvedValueOnce({
-      data: { drives: [{ id: 'drive-1', name: 'Drive Clientes DPG' }] }
+      data: { drives: [{ id: 'drive-1', name: 'DRIVE de CLIENTES da DPG' }] }
     });
     mockFilesList
       .mockResolvedValueOnce({ data: { files: [{ id: 'cli-fuzzy', name: '01 - Cliente X LTDA' }] } })
@@ -83,7 +113,7 @@ describe('ensureClientFolder — pasta do cliente encontrada', () => {
 describe('ensureClientFolder — pasta do cliente NAO encontrada (fallback _Sem-Pasta)', () => {
   it('cai em _Sem-Pasta/<ano> e retorna location=pending sem lancar', async () => {
     mockDrivesList.mockResolvedValueOnce({
-      data: { drives: [{ id: 'drive-1', name: 'Drive Clientes DPG' }] }
+      data: { drives: [{ id: 'drive-1', name: 'DRIVE de CLIENTES da DPG' }] }
     });
     // Sequencia esperada de files.list no fallback:
     // 1) raiz do drive — busca cliente, retorna apenas pastas que nao casam
@@ -103,7 +133,7 @@ describe('ensureClientFolder — pasta do cliente NAO encontrada (fallback _Sem-
 
   it('auto-cria _Sem-Pasta na raiz do drive quando ainda nao existe', async () => {
     mockDrivesList.mockResolvedValueOnce({
-      data: { drives: [{ id: 'drive-1', name: 'Drive Clientes DPG' }] }
+      data: { drives: [{ id: 'drive-1', name: 'DRIVE de CLIENTES da DPG' }] }
     });
     mockFilesList
       .mockResolvedValueOnce({ data: { files: [] } })   // cliente nao encontrado
@@ -135,7 +165,7 @@ describe('ensureClientFolder — pasta do cliente NAO encontrada (fallback _Sem-
 
   it('NUNCA auto-cria a pasta do cliente em fallback', async () => {
     mockDrivesList.mockResolvedValueOnce({
-      data: { drives: [{ id: 'drive-1', name: 'Drive Clientes DPG' }] }
+      data: { drives: [{ id: 'drive-1', name: 'DRIVE de CLIENTES da DPG' }] }
     });
     mockFilesList
       .mockResolvedValueOnce({ data: { files: [] } })   // cliente nao encontrado

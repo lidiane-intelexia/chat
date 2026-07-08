@@ -648,7 +648,10 @@ async function renderPdf(text: string, report: ReportData): Promise<Buffer> {
 
   try {
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0', timeout: 30000 });
+    // HTML e autocontido (sem recursos externos), entao 'load' resolve na hora.
+    // 'networkidle0' pode travar aguardando conexoes fantasma (ex.: favicon) e
+    // estourar o timeout em servidor carregado. Timeout com folga por seguranca.
+    await page.setContent(html, { waitUntil: 'load', timeout: 60000 });
 
     const pdfBuffer = await page.pdf({
       format: 'A4',

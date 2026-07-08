@@ -15,7 +15,8 @@ interface FolderMatch {
   score: number;
 }
 
-const SHARED_DRIVE_NAME = 'Drive Clientes DPG';
+// Nome real do Drive compartilhado no Google (o match e exato apos normalizeName).
+const SHARED_DRIVE_NAME = 'DRIVE de CLIENTES da DPG';
 const SUBFOLDER_PATH = ['Relacionamento com Cliente', 'Relatórios'];
 // Pasta-inbox para relatorios cuja pasta do cliente nao existe no Drive.
 // O underline forca ela a ficar no topo da listagem alfabetica — sinal visual
