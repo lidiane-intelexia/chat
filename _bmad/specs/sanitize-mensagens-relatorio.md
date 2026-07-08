@@ -191,3 +191,36 @@ da implementacao (regra 2 do CLAUDE.md).
 4. `stats` da sanitizacao aparece no log estruturado (Pino) de cada geracao.
 5. Contrato de `POST /reports` inalterado (request e response identicos).
 6. `npm run check` (lint + typecheck + test + build) verde.
+
+## 11. Resultado do v1 e direcao v2 (retrospectiva 2026-07-08)
+
+**Status v1:** implementado, mergeado (PR #7) e deployado. Pipeline roda fim-a-fim.
+Eco da IA removido com sucesso (secoes da IA + raw log renderizado por codigo).
+**Porem o criterio de aceite 2 NAO foi atingido.**
+
+**Evidencia (PDF real do cliente "fenix"):** o PDF saiu com **117 paginas** (meta era
+~5-10). Da pagina 13 a 117 (~105 paginas) e o `[RELATORIO BRUTO COMPLETO]`, ainda
+cheio de "Teste" e protocolos repetidos. Log da sanitizacao:
+`input:156, droppedTestOnly:0, droppedDuplicate:11, output:145`.
+
+**Causa raiz — o modelo de ruido da v1 estava errado para os dados reais:**
+`dropTestOnly` e `dedupExact` operam no nivel da **mensagem inteira**. Mas o ruido e
+**intra-mensagem**: cada notificacao automatica e cada despejo "Seguem protocolos em
+atraso do departamento..." e UMA unica mensagem do Google Chat contendo centenas de
+linhas (com "Teste" e protocolos repetidos dentro). Por isso quase nada casou.
+
+**Estrutura real observada:**
+- Sinal (conversa humana real): ~15-20 mensagens (Jacqueline, Nestor, Bruno, Lidiane).
+- Ruido (~130 msgs): remetentes terminando em "- Automatica" (Novos Clientes BuscaPost,
+  Atrasados Time Caio, Log de Publicacoes Busca Post, Atrasados time Amanda) + despejos
+  manuais de "Seguem protocolos em atraso".
+
+**Direcao v2 (a validar em party / spec propria):** classificar/filtrar/colapsar
+mensagens de **notificacao automatica x conversa humana** ANTES do pipeline — o ponto
+que a Mary ja havia levantado (secao 6, Nao-objetivos). Marca clara de ruido: remetente
+"Automatica", blocos "Seguem protocolos em atraso", "Log de Publicacoes". Usar o PDF do
+fenix como **fixture real** para medir antes/depois (117 -> X paginas).
+
+**Pendencia paralela:** PR #8 (fix timeout Puppeteer `waitUntil: 'load'` + 60s; nome do
+Drive corrigido para "DRIVE de CLIENTES da DPG") ainda a deployar — necessario para
+confiabilidade do PDF e para o upload no Drive.
