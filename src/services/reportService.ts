@@ -561,6 +561,51 @@ function buildRawLogHtml(content: string): string {
 // Full HTML builder
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// v2 (secao 4.5): secoes DESCRITIVAS vazias sao omitidas do PDF. Secoes de
+// RISCO (Pendencias, Gargalos, Cronograma) sempre aparecem, mesmo vazias, para
+// nao mascarar busca-falha como "cliente tranquilo". A deteccao e no CODIGO
+// (nao no prompt), entao independe do humor da IA.
+// ---------------------------------------------------------------------------
+const OMIT_WHEN_EMPTY = new Set(['dados criticos', 'dados de acesso']);
+
+function normalizeSectionKey(value: string): string {
+  return value.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+export function shouldOmitSection(title: string, content: string): boolean {
+  if (!OMIT_WHEN_EMPTY.has(normalizeSectionKey(title))) return false;
+  const normalized = normalizeSectionKey(content);
+  return normalized.length === 0 || normalized.startsWith('nenhum');
+}
+
+// ---------------------------------------------------------------------------
+// v2 (opcao B): limpa o log bruto INLINE, mantendo tudo no proprio relatorio
+// (sem link externo). Remove linhas "Teste" isoladas e deduplica linhas de
+// protocolo repetidas. Conservador: so mexe em linha de protocolo/Teste;
+// nunca deduplica conversa humana.
+// ---------------------------------------------------------------------------
+const TEST_ONLY_LINE = /^testes?$/;
+
+function isProtocolLine(normalized: string): boolean {
+  return /\bprotocolo\b/.test(normalized) || /\bcod\.?\s*:/.test(normalized);
+}
+
+export function cleanRawLog(rawLog: string): string {
+  const seenProtocols = new Set<string>();
+  const kept: string[] = [];
+  for (const line of rawLog.split('\n')) {
+    const normalized = normalizeSectionKey(line);
+    if (normalized.length && TEST_ONLY_LINE.test(normalized)) continue;
+    if (normalized.length && isProtocolLine(normalized)) {
+      if (seenProtocols.has(normalized)) continue;
+      seenProtocols.add(normalized);
+    }
+    kept.push(line);
+  }
+  return kept.join('\n');
+}
+
 function buildHtml(text: string, report: ReportData): string {
   const sections = parseMarkdownSections(text);
   const generatedAt = nowBrazil();
@@ -576,6 +621,8 @@ function buildHtml(text: string, report: ReportData): string {
 
   // Sections
   for (const section of sections) {
+    // v2: pula secoes descritivas vazias (Dados Criticos / Dados de Acesso).
+    if (shouldOmitSection(section.title, section.content)) continue;
     if (section.title === 'DADOS DE ACESSO') {
       body += `
         <div class="access-section">
@@ -614,7 +661,7 @@ function buildHtml(text: string, report: ReportData): string {
   body += `
     <div class="section raw-log">
       <div class="section-title">RELATORIO BRUTO COMPLETO</div>
-      ${buildRawLogHtml(rawLogContent)}
+      ${buildRawLogHtml(cleanRawLog(rawLogContent))}
     </div>`;
 
   return `<!DOCTYPE html>
