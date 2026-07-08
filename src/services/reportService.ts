@@ -579,6 +579,33 @@ export function shouldOmitSection(title: string, content: string): boolean {
   return normalized.length === 0 || normalized.startsWith('nenhum');
 }
 
+// ---------------------------------------------------------------------------
+// v2 (opcao B): limpa o log bruto INLINE, mantendo tudo no proprio relatorio
+// (sem link externo). Remove linhas "Teste" isoladas e deduplica linhas de
+// protocolo repetidas. Conservador: so mexe em linha de protocolo/Teste;
+// nunca deduplica conversa humana.
+// ---------------------------------------------------------------------------
+const TEST_ONLY_LINE = /^testes?$/;
+
+function isProtocolLine(normalized: string): boolean {
+  return /\bprotocolo\b/.test(normalized) || /\bcod\.?\s*:/.test(normalized);
+}
+
+export function cleanRawLog(rawLog: string): string {
+  const seenProtocols = new Set<string>();
+  const kept: string[] = [];
+  for (const line of rawLog.split('\n')) {
+    const normalized = normalizeSectionKey(line);
+    if (normalized.length && TEST_ONLY_LINE.test(normalized)) continue;
+    if (normalized.length && isProtocolLine(normalized)) {
+      if (seenProtocols.has(normalized)) continue;
+      seenProtocols.add(normalized);
+    }
+    kept.push(line);
+  }
+  return kept.join('\n');
+}
+
 function buildHtml(text: string, report: ReportData): string {
   const sections = parseMarkdownSections(text);
   const generatedAt = nowBrazil();
@@ -634,7 +661,7 @@ function buildHtml(text: string, report: ReportData): string {
   body += `
     <div class="section raw-log">
       <div class="section-title">RELATORIO BRUTO COMPLETO</div>
-      ${buildRawLogHtml(rawLogContent)}
+      ${buildRawLogHtml(cleanRawLog(rawLogContent))}
     </div>`;
 
   return `<!DOCTYPE html>
