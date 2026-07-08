@@ -1,6 +1,16 @@
 # SDD Spec — Relatorio v2: classificacao por procedencia + pertinencia, log bruto linkado
 
-- **Status:** draft-r2 (revisada em party mode pre-lock 2026-07-08 — Winston/Amelia/Mary; bloqueadores incorporados abaixo)
+- **Status:** parcialmente implementada com MUDANCA DE ESCOPO (2026-07-08).
+
+> **MUDANCA DE ESCOPO (2026-07-08, decisao da owner):** a owner DESISTIU do log bruto
+> linkado (secao 4.4) — quer TUDO no proprio relatorio. Abordagem adotada: log bruto continua
+> INLINE, mas LIMPO por linha (remove "Teste" isolado + deduplica protocolos repetidos =
+> `cleanRawLog`). Tambem implementado: omitir secoes descritivas vazias (`shouldOmitSection`,
+> secao 4.5). As secoes 4.1-4.4 (particao por remetente, baldes, link no Drive, reordenar
+> pipeline, migration) NAO foram implementadas — a limpeza inline atende sem elas. Branch:
+> `feat/relatorio-v2-classificacao`. O restante abaixo fica como referencia historica.
+
+- **Status original:** draft-r2 (revisada em party mode pre-lock 2026-07-08 — Winston/Amelia/Mary)
 - **Owner:** processos@grupodpg.com.br (Lidy)
 - **Branch sugerida:** `feat/relatorio-v2-classificacao`
 - **Data:** 2026-07-08
