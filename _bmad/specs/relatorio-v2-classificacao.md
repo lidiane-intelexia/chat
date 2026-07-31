@@ -31,6 +31,9 @@
 > bloco AUTOMATICO sem citar o cliente -> removido INTEIRO (anti-orfao); conversa humana sem citar
 > o cliente -> preservada. Roster detectado por massa de linhas de nome cru (>= 8, curtas, sem ":"
 > nem pontuacao final). +5 testes (total 84), npm run check verde.
+> **Transparencia do corte:** quando um bloco tem itens de outros clientes cortados, adiciona um
+> marcador "(... +N linhas de outros clientes omitidas)" logo apos as linhas do cliente, para nao
+> dar a impressao de que so o cliente aparecia na lista/despejo. Testes ajustados.
 
 - **Status original:** draft-r2 (revisada em party mode pre-lock 2026-07-08 — Winston/Amelia/Mary)
 - **Owner:** processos@grupodpg.com.br (Lidy)

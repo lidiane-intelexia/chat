@@ -683,9 +683,21 @@ export function filterRawLogStrong(rawLog: string, query: ClientQuery): string {
     if (blockHasClient) {
       if (header) out.push(header);
       const blockIsRoster = body.filter(isBareEntityLine).length >= ROSTER_MIN;
+      let dropped = 0;
       for (const line of body) {
         const isEnum = isListEntryLine(line) || (blockIsRoster && isBareEntityLine(line));
-        if (!isEnum || lineMatchesClient(line, query)) out.push(line);
+        if (!isEnum || lineMatchesClient(line, query)) {
+          out.push(line);
+        } else {
+          dropped++;
+        }
+      }
+      // Transparencia: sinaliza que o bloco tinha MAIS itens (de outros clientes)
+      // cortados, para nao dar a impressao de que so o cliente aparecia na lista.
+      if (dropped === 1) {
+        out.push('(... +1 linha de outro cliente omitida)');
+      } else if (dropped > 1) {
+        out.push(`(... +${dropped} linhas de outros clientes omitidas)`);
       }
     } else if (header && isBotSender(senderOf(header))) {
       // Anti-orfao: bloco automatico sem mencao ao cliente = ruido. Remove tudo.
