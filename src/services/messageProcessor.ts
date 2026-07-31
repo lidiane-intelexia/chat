@@ -172,22 +172,40 @@ function isNegativeContext(messageText: string, query: ClientQuery): boolean {
  * Verifica se a mensagem menciona o NOME do cliente.
  * Usa tokenização + similaridade (Levenshtein) para tolerar variações.
  */
+// Tokens genericos de nome de empresa contabil que casam quase todo cliente e
+// geram falso-positivo (ex.: "contabil" e substring de "contabilidade";
+// "gestao" ~ "estao" por similaridade). Sao IGNORADOS no match por NOME — casa-se
+// pelos tokens distintivos (ex.: "cescon") + CNPJ + link. Se o nome so tiver
+// tokens genericos, cai no fallback (usa todos) para nao zerar o match.
+const GENERIC_NAME_TOKENS = new Set([
+  'contabil', 'contabilidade', 'contabeis', 'gestao', 'assessoria', 'consultoria',
+  'servicos', 'servico', 'empresarial', 'empresariais', 'ltda', 'eireli', 'organizacao',
+  'escritorio', 'solucoes', 'solucao', 'contadores', 'associados', 'tributaria',
+  'fiscal', 'financeira', 'administrativa', 'negocios', 'digital'
+]);
+
+function distinctiveNameTokens(name: string): string[] {
+  const all = tokenize(name);
+  const distinctive = all.filter((t) => !GENERIC_NAME_TOKENS.has(t));
+  return distinctive.length ? distinctive : all;
+}
+
 function matchByName(messageText: string, messageTextRaw: string, name: string, threshold: number): boolean {
   const nameNorm = normalizeText(name);
 
   // Filtro de contexto negativo para nomes curtos/ambíguos
   if (isNegativeContext(messageText, { name })) return false;
 
-  // Match direto do nome completo como substring
-  if (messageText.includes(nameNorm)) return true;
+  // Match direto do nome completo como substring (alta precisao)
+  if (nameNorm.length > 0 && messageText.includes(nameNorm)) return true;
 
-  // Match por tokens individuais do nome
-  const nameTokens = tokenize(name);
+  // Match por tokens DISTINTIVOS do nome (ignora termos genericos)
+  const nameTokens = distinctiveNameTokens(name);
   for (const token of nameTokens) {
     if (messageText.includes(token)) return true;
   }
 
-  // Fallback: similaridade por token
+  // Fallback: similaridade por token distintivo
   const messageTokens = tokenize(messageTextRaw);
   for (const token of nameTokens) {
     if (token.length < 2) continue;
