@@ -1,6 +1,7 @@
 import puppeteer from 'puppeteer';
 import { buildReportData, sanitizeMessages } from './messageProcessor.js';
 import type { ClientQuery, ReportData } from './messageProcessor.js';
+import { lineMatchesClient } from './messageProcessor.js';
 import type { MessageRecord } from './chatService.js';
 import { analyzeWithAI, type AnalyzeOptions } from './aiService.js';
 import { logger } from '../utils/logger.js';
@@ -606,7 +607,43 @@ export function cleanRawLog(rawLog: string): string {
   return kept.join('\n');
 }
 
-function buildHtml(text: string, report: ReportData): string {
+// ---------------------------------------------------------------------------
+// v2 (corte forte, nivel 1): filtra o log bruto INLINE por linha, mantendo so
+// as linhas ligadas ao cliente pesquisado. O ruido intra-mensagem sao os
+// despejos "Seguem protocolos em atraso" e as notificacoes "- Automatica" —
+// UMA mensagem com centenas de linhas de OUTROS clientes. Regra determinística:
+//   - cabecalho ([data] [remetente]:)      -> mantem (estrutura da timeline)
+//   - linha que NAO e item de lista (prosa/
+//     conversa humana / campos "- CLIENTE"/
+//     "Link da publicacao")                -> mantem
+//   - item de lista (contem "Protocolo:" ou
+//     comeca com bullet "•")               -> mantem SO se casar o cliente
+// Assim some o dump de outros clientes e sobra a historia real do cliente.
+// Matching centralizado em lineMatchesClient (messageProcessor), nunca no prompt.
+// ---------------------------------------------------------------------------
+function isRawHeaderLine(line: string): boolean {
+  return /^\[[^\]]+\]\s*\[[^\]]+\]\s*:/.test(line);
+}
+
+function isListEntryLine(line: string): boolean {
+  const trimmed = line.trim();
+  return /protocolo\s*:/i.test(trimmed) || trimmed.startsWith('•');
+}
+
+export function filterRawLogStrong(rawLog: string, query: ClientQuery): string {
+  const kept: string[] = [];
+  for (const line of rawLog.split('\n')) {
+    if (isRawHeaderLine(line) || !isListEntryLine(line)) {
+      kept.push(line);
+      continue;
+    }
+    // Item de lista: so entra se mencionar o cliente pesquisado.
+    if (lineMatchesClient(line, query)) kept.push(line);
+  }
+  return kept.join('\n');
+}
+
+function buildHtml(text: string, report: ReportData, query: ClientQuery): string {
   const sections = parseMarkdownSections(text);
   const generatedAt = nowBrazil();
 
@@ -661,7 +698,7 @@ function buildHtml(text: string, report: ReportData): string {
   body += `
     <div class="section raw-log">
       <div class="section-title">RELATORIO BRUTO COMPLETO</div>
-      ${buildRawLogHtml(cleanRawLog(rawLogContent))}
+      ${buildRawLogHtml(cleanRawLog(filterRawLogStrong(rawLogContent, query)))}
     </div>`;
 
   return `<!DOCTYPE html>
@@ -680,8 +717,8 @@ function buildHtml(text: string, report: ReportData): string {
 // Puppeteer PDF Renderer
 // ---------------------------------------------------------------------------
 
-async function renderPdf(text: string, report: ReportData): Promise<Buffer> {
-  const html = buildHtml(text, report);
+async function renderPdf(text: string, report: ReportData, query: ClientQuery): Promise<Buffer> {
+  const html = buildHtml(text, report, query);
 
   const browser = await puppeteer.launch({
     headless: true,
@@ -734,7 +771,7 @@ export async function generateReport(
   const report = buildReportData(clean, query, nameMap);
   const rawText = buildReportText(report);
   const text = await analyzeWithAI(rawText, clean, analyzeOptions);
-  const pdf = format === 'pdf' ? await renderPdf(text, report) : undefined;
+  const pdf = format === 'pdf' ? await renderPdf(text, report, query) : undefined;
 
   return { report, text, pdf } satisfies ReportOutput;
 }

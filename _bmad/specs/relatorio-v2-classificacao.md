@@ -10,6 +10,17 @@
 > pipeline, migration) NAO foram implementadas — a limpeza inline atende sem elas. Branch:
 > `feat/relatorio-v2-classificacao`. O restante abaixo fica como referencia historica.
 
+> **CORTE FORTE nivel 1 (2026-07-31, decisao da owner):** apos ver os PDFs reais (Fenix 67 pags,
+> Cescon 24 pags) ficou claro que o log bruto INLINE ainda trazia os despejos de protocolo de
+> OUTROS clientes (ruido intra-mensagem). A owner escolheu o "nivel 1": filtrar o log bruto por
+> linha, mantendo so as linhas ligadas ao cliente pesquisado (NAO compactar as publicacoes = nivel
+> 2, deixado de fora). Implementado: `lineMatchesClient(linha, query)` (`messageProcessor.ts`,
+> reusa os matchers por campo) + `filterRawLogStrong(log, query)` (`reportService.ts`). Regra
+> deterministica: mantem cabecalho `[data] [remetente]:` e prosa/campos (`- CLIENTE`, `- CNPJ`,
+> `Link da publicacao`); item de lista (`Protocolo:` ou bullet `•`) so entra se casar o cliente.
+> Aplicado no PDF: `cleanRawLog(filterRawLogStrong(rawLogContent, query))`. Reduz PAGINAS (nao o
+> custo da IA — a entrada do Gemini segue completa). 12 testes novos, npm run check verde.
+
 - **Status original:** draft-r2 (revisada em party mode pre-lock 2026-07-08 — Winston/Amelia/Mary)
 - **Owner:** processos@grupodpg.com.br (Lidy)
 - **Branch sugerida:** `feat/relatorio-v2-classificacao`
