@@ -1,6 +1,6 @@
 import puppeteer from 'puppeteer';
 import { buildReportData, sanitizeMessages } from './messageProcessor.js';
-import type { ClientQuery, ReportData } from './messageProcessor.js';
+import type { ClientQuery, ReportData, TimelineEntry } from './messageProcessor.js';
 import { lineMatchesClient } from './messageProcessor.js';
 import type { MessageRecord } from './chatService.js';
 import { analyzeWithAI, type AnalyzeOptions } from './aiService.js';
@@ -580,62 +580,30 @@ export function shouldOmitSection(title: string, content: string): boolean {
   return normalized.length === 0 || normalized.startsWith('nenhum');
 }
 
-// ---------------------------------------------------------------------------
-// v2 (opcao B): limpa o log bruto INLINE, mantendo tudo no proprio relatorio
-// (sem link externo). Remove linhas "Teste" isoladas e deduplica linhas de
-// protocolo repetidas. Conservador: so mexe em linha de protocolo/Teste;
-// nunca deduplica conversa humana.
-// ---------------------------------------------------------------------------
 const TEST_ONLY_LINE = /^testes?$/;
 
 function isProtocolLine(normalized: string): boolean {
   return /\bprotocolo\b/.test(normalized) || /\bcod\.?\s*:/.test(normalized);
 }
 
-export function cleanRawLog(rawLog: string): string {
-  const seenProtocols = new Set<string>();
-  const kept: string[] = [];
-  for (const line of rawLog.split('\n')) {
-    const normalized = normalizeSectionKey(line);
-    if (normalized.length && TEST_ONLY_LINE.test(normalized)) continue;
-    if (normalized.length && isProtocolLine(normalized)) {
-      if (seenProtocols.has(normalized)) continue;
-      seenProtocols.add(normalized);
-    }
-    kept.push(line);
-  }
-  return kept.join('\n');
-}
-
 // ---------------------------------------------------------------------------
-// v2 (corte forte): filtra o log bruto INLINE, mantendo so o que e do cliente
-// pesquisado. Trabalha por BLOCO (mensagem = cabecalho + linhas ate o proximo
-// cabecalho), de forma deterministica (matching em lineMatchesClient, nunca no
-// prompt):
-//   - Bloco que menciona o cliente em alguma linha -> mantem cabecalho + prosa;
-//     das linhas de LISTA (protocolo/bullet) ou de ROSTER (lista de nomes de
-//     clientes) mantem SO as que casam o cliente. Some o dump de outros clientes.
-//   - Bloco AUTOMATICO ("- Automatica") que NAO menciona o cliente em lugar
-//     nenhum -> remove o bloco INTEIRO (anti-orfao). Sao digests que vazaram por
-//     casar espaco/remetente e so deixariam um cabecalho vazio ("Atencao, os
-//     seguintes chamados estao Atrasados:") sem nada do cliente embaixo.
-//   - Conversa humana sem citar o cliente -> preserva (pode ser contexto).
+// v2 (corte forte NA FONTE): filtra a TIMELINE do relatorio ANTES de ela ir para
+// a IA (buildReportText -> secao "Historico Consolidado") e para o PDF. Assim a
+// IA so enxerga o cliente pesquisado (CRONOGRAMA/analise limpos) e o custo de
+// tokens cai. Deterministico (matching em lineMatchesClient, nunca no prompt).
+// Por MENSAGEM:
+//   - Mensagem que NAO cita o cliente: se e automatica ("- Automatica") e ruido
+//     que vazou (por espaco/remetente) -> descarta; se e humana -> preserva
+//     (pode ser contexto).
+//   - Mensagem que cita o cliente: mantem prosa + linhas do cliente; das linhas
+//     de LISTA (protocolo/bullet) ou ROSTER (nomes crus) mantem SO as do cliente.
+//     Deduplica linhas de protocolo do cliente repetidas ENTRE mensagens (ex.: o
+//     mesmo chamado RIC624GO reportado todo dia). Remove "Teste" isolado. Se apos
+//     o filtro+dedup sobrou so prosa, sem NENHUMA linha do cliente (casca),
+//     descarta a mensagem inteira. Marca "(... +N linhas de outros clientes
+//     omitidas)" para nao dar a impressao de que so o cliente estava na lista.
 // ---------------------------------------------------------------------------
-const ROSTER_MIN = 8; // n. de nomes crus para considerar o bloco um "roster"
-
-function isRawHeaderLine(line: string): boolean {
-  return /^\[[^\]]+\]\s*\[[^\]]+\]\s*:/.test(line);
-}
-
-function senderOf(header: string): string {
-  const m = header.match(/^\[[^\]]+\]\s*\[([^\]]+)\]\s*:/);
-  return m?.[1]?.trim() ?? '';
-}
-
-function headerTextOf(header: string): string {
-  const m = header.match(/^\[[^\]]+\]\s*\[[^\]]+\]\s*:\s*(.*)$/);
-  return m?.[1] ?? '';
-}
+const ROSTER_MIN = 8; // n. de nomes crus para considerar a mensagem um "roster"
 
 function isBotSender(sender: string): boolean {
   return /automatica/i.test(sender);
@@ -658,60 +626,59 @@ function isBareEntityLine(line: string): boolean {
   return /^[A-Za-z0-9]/.test(t);
 }
 
-export function filterRawLogStrong(rawLog: string, query: ClientQuery): string {
-  const lines = rawLog.split('\n');
-  const out: string[] = [];
+export function filterTimelineByClient(timeline: TimelineEntry[], query: ClientQuery): TimelineEntry[] {
+  const seenProtocols = new Set<string>();
+  const out: TimelineEntry[] = [];
 
-  let i = 0;
-  while (i < lines.length) {
-    const first = lines[i] ?? '';
-    const header = isRawHeaderLine(first) ? first : null;
-    const body: string[] = [];
-    let j = header ? i + 1 : i;
-    while (j < lines.length) {
-      const next = lines[j] ?? '';
-      if (isRawHeaderLine(next)) break;
-      body.push(next);
-      j++;
+  for (const entry of timeline) {
+    const lines = entry.text.split('\n');
+    const mentions = lines.some((l) => lineMatchesClient(l, query));
+
+    if (!mentions) {
+      // Nao cita o cliente: bot = ruido -> descarta; humano = contexto -> mantem.
+      if (isBotSender(entry.sender)) continue;
+      out.push(entry);
+      continue;
     }
-    i = j;
 
-    const blockHasClient =
-      (header ? lineMatchesClient(headerTextOf(header), query) : false) ||
-      body.some((l) => lineMatchesClient(l, query));
+    const isRoster = lines.filter(isBareEntityLine).length >= ROSTER_MIN;
+    const kept: string[] = [];
+    let dropped = 0;
+    for (const line of lines) {
+      const normalized = normalizeSectionKey(line);
+      if (normalized.length && TEST_ONLY_LINE.test(normalized)) continue;
 
-    if (blockHasClient) {
-      if (header) out.push(header);
-      const blockIsRoster = body.filter(isBareEntityLine).length >= ROSTER_MIN;
-      let dropped = 0;
-      for (const line of body) {
-        const isEnum = isListEntryLine(line) || (blockIsRoster && isBareEntityLine(line));
-        if (!isEnum || lineMatchesClient(line, query)) {
-          out.push(line);
-        } else {
+      const isEnum = isListEntryLine(line) || (isRoster && isBareEntityLine(line));
+      if (isEnum && !lineMatchesClient(line, query)) {
+        dropped++;
+        continue;
+      }
+      // Dedup global das linhas de protocolo do cliente repetidas entre mensagens.
+      if (normalized.length && isProtocolLine(normalized)) {
+        if (seenProtocols.has(normalized)) {
           dropped++;
+          continue;
         }
+        seenProtocols.add(normalized);
       }
-      // Transparencia: sinaliza que o bloco tinha MAIS itens (de outros clientes)
-      // cortados, para nao dar a impressao de que so o cliente aparecia na lista.
-      if (dropped === 1) {
-        out.push('(... +1 linha de outro cliente omitida)');
-      } else if (dropped > 1) {
-        out.push(`(... +${dropped} linhas de outros clientes omitidas)`);
-      }
-    } else if (header && isBotSender(senderOf(header))) {
-      // Anti-orfao: bloco automatico sem mencao ao cliente = ruido. Remove tudo.
-    } else {
-      // Conversa humana (ou bloco sem cabecalho): preserva integralmente.
-      if (header) out.push(header);
-      for (const line of body) out.push(line);
+      kept.push(line);
     }
+
+    // Casca: sobrou so prosa, sem NENHUMA linha do cliente -> descarta a mensagem.
+    if (!kept.some((l) => lineMatchesClient(l, query))) continue;
+
+    if (dropped === 1) {
+      kept.push('(... +1 linha de outro cliente omitida)');
+    } else if (dropped > 1) {
+      kept.push(`(... +${dropped} linhas de outros clientes omitidas)`);
+    }
+    out.push({ ...entry, text: kept.join('\n') });
   }
 
-  return out.join('\n');
+  return out;
 }
 
-function buildHtml(text: string, report: ReportData, query: ClientQuery): string {
+function buildHtml(text: string, report: ReportData): string {
   const sections = parseMarkdownSections(text);
   const generatedAt = nowBrazil();
 
@@ -756,8 +723,8 @@ function buildHtml(text: string, report: ReportData, query: ClientQuery): string
     }
   }
 
-  // Anexo bruto deterministico: montado da timeline ja sanitizada, no mesmo
-  // formato de linha que buildReportText produz, e nao mais ecoado pela IA.
+  // Anexo bruto deterministico: montado da timeline JA FILTRADA na fonte
+  // (filterTimelineByClient), no mesmo formato de linha que buildReportText usa.
   const rawLogContent = report.timeline.length
     ? report.timeline
         .map((entry) => `[${formatDateTimePrecise(entry.time)}] [${entry.sender}]: ${entry.text}`)
@@ -766,7 +733,7 @@ function buildHtml(text: string, report: ReportData, query: ClientQuery): string
   body += `
     <div class="section raw-log">
       <div class="section-title">RELATORIO BRUTO COMPLETO</div>
-      ${buildRawLogHtml(cleanRawLog(filterRawLogStrong(rawLogContent, query)))}
+      ${buildRawLogHtml(rawLogContent)}
     </div>`;
 
   return `<!DOCTYPE html>
@@ -785,8 +752,8 @@ function buildHtml(text: string, report: ReportData, query: ClientQuery): string
 // Puppeteer PDF Renderer
 // ---------------------------------------------------------------------------
 
-async function renderPdf(text: string, report: ReportData, query: ClientQuery): Promise<Buffer> {
-  const html = buildHtml(text, report, query);
+async function renderPdf(text: string, report: ReportData): Promise<Buffer> {
+  const html = buildHtml(text, report);
 
   const browser = await puppeteer.launch({
     headless: true,
@@ -837,9 +804,17 @@ export async function generateReport(
   const { records: clean, stats } = sanitizeMessages(records);
   logger.info({ ...stats }, 'sanitizacao de mensagens do relatorio');
   const report = buildReportData(clean, query, nameMap);
+  // Corte forte NA FONTE: filtra a timeline (Historico Consolidado) antes de ir
+  // para a IA e para o PDF. So o cliente pesquisado chega na analise.
+  const timelineBefore = report.timeline.length;
+  report.timeline = filterTimelineByClient(report.timeline, query);
+  logger.info(
+    { timelineBefore, timelineAfter: report.timeline.length },
+    'corte forte da timeline (fonte da IA + PDF)'
+  );
   const rawText = buildReportText(report);
   const text = await analyzeWithAI(rawText, clean, analyzeOptions);
-  const pdf = format === 'pdf' ? await renderPdf(text, report, query) : undefined;
+  const pdf = format === 'pdf' ? await renderPdf(text, report) : undefined;
 
   return { report, text, pdf } satisfies ReportOutput;
 }

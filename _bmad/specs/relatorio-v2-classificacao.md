@@ -47,6 +47,20 @@
 > cosmeticos conhecidos: "AFISCONT" (1a linha do roster fica no cabecalho) e "ML." (nome cru com "."
 > final nao detectado como bare-entity).
 
+> **CORTE FORTE NA FONTE (2026-07-31) — a correcao que faltava:** os cortes anteriores so limpavam o
+> PDF (render). Mas `buildReportText` manda pra IA a secao "Historico Consolidado" = a TIMELINE
+> COMPLETA, sem filtro. Logo a IA via os despejos de TODOS os clientes e (de forma nao-deterministica)
+> enumerava cada protocolo no CRONOGRAMA -> secao explodia (23 pags). E os digests "Atrasados Time
+> Caio" que "sobravam" na verdade CITAM o Cescon (RIC624GO atrasado reportado todo dia); a linha
+> identica era deduplicada e sobrava a casca. Fix: mover o filtro para a FONTE — `filterTimelineByClient`
+> (`reportService.ts`) filtra `report.timeline` ANTES de `buildReportText` (IA) e do PDF, por MENSAGEM:
+> mensagem que nao cita o cliente e automatica -> descarta (humana -> preserva); mensagem que cita ->
+> mantem prosa + linhas do cliente, corta linhas de lista/roster de outros, DEDUPLICA protocolos do
+> cliente repetidos entre mensagens, remove "Teste", e se virar casca (so prosa) descarta. `filterRawLogStrong`
+> e `cleanRawLog` (que so agiam no render) foram REMOVIDOS; o render passa a usar a timeline ja filtrada.
+> Efeito: IA so ve o cliente -> CRONOGRAMA limpo/estavel, custo cai, cascas somem. 10 testes de
+> filterTimelineByClient (total 75).
+
 - **Status original:** draft-r2 (revisada em party mode pre-lock 2026-07-08 — Winston/Amelia/Mary)
 - **Owner:** processos@grupodpg.com.br (Lidy)
 - **Branch sugerida:** `feat/relatorio-v2-classificacao`
