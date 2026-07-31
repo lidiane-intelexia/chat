@@ -38,6 +38,24 @@ describe('lineMatchesClient — match por linha (corte forte)', () => {
       lineMatchesClient('Cod.: EXE403ES | Cliente: EXECUTA CONTABILIDADE | Protocolo: 2', { name: 'Fenix' })
     ).toBe(false);
   });
+
+  // Regressao: nome com termos genericos ("Gestao Contabil") nao pode casar
+  // outros clientes contabeis via "contabil" (substring de "contabilidade") nem
+  // "gestao" (~ "estao"). So o token distintivo ("cescon") vale.
+  it('nome generico ("Cescon Gestao Contabil") NAO casa outro cliente contabil', () => {
+    const q = { name: 'Cescon Gestao Contabil' };
+    expect(lineMatchesClient('• Cliente: MEGA CONTABILIDADE | Protocolo: 1', q)).toBe(false);
+    expect(lineMatchesClient('• Cliente: SAO LUCAS ASSESSORIA CONTABIL | Protocolo: 2', q)).toBe(false);
+    expect(lineMatchesClient('Atencao, os seguintes chamados estao Atrasados:', q)).toBe(false);
+  });
+
+  it('nome generico ainda casa o proprio cliente pelo token distintivo', () => {
+    expect(
+      lineMatchesClient('• Cod.: RIC624GO | Cliente: CESCON GESTAO CONTABIL | Protocolo: 1', {
+        name: 'Cescon Gestao Contabil'
+      })
+    ).toBe(true);
+  });
 });
 
 describe('sanitizeMessages — dropTestOnly', () => {

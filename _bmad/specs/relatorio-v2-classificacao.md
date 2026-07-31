@@ -35,6 +35,18 @@
 > marcador "(... +N linhas de outros clientes omitidas)" logo apos as linhas do cliente, para nao
 > dar a impressao de que so o cliente aparecia na lista/despejo. Testes ajustados.
 
+> **CAUSA RAIZ do ruido — match por termos genericos (2026-07-31):** reproduzido que o `matchByName`
+> casava quase todo cliente contabil quando o nome pesquisado tinha termos genericos. Ex.: nome
+> "Cescon Gestao Contabil" -> token "contabil" e SUBSTRING de "contabilidade" (em quase todo nome de
+> cliente) e "gestao" casa "estao" por similaridade (1-lev/maxLen >= 0.7). Efeito: a BUSCA (matchMessage)
+> puxava ~70 msgs (todos os digests "Atrasados Time Caio"), a IA repetia "Alerta de chamados atrasados"
+> ~10x no CRONOGRAMA, e o log bruto ficava com cascas. Fix na raiz (`matchByName`): ignora
+> GENERIC_NAME_TOKENS (contabil/contabilidade/gestao/assessoria/consultoria/servicos/empresarial/ltda/
+> ...), casando so por tokens DISTINTIVOS (ex.: "cescon") + CNPJ + link; fallback usa todos se o nome so
+> tiver genericos. Corrige busca + corte forte de uma vez. +2 testes de regressao (total 86). Residuos
+> cosmeticos conhecidos: "AFISCONT" (1a linha do roster fica no cabecalho) e "ML." (nome cru com "."
+> final nao detectado como bare-entity).
+
 - **Status original:** draft-r2 (revisada em party mode pre-lock 2026-07-08 — Winston/Amelia/Mary)
 - **Owner:** processos@grupodpg.com.br (Lidy)
 - **Branch sugerida:** `feat/relatorio-v2-classificacao`
