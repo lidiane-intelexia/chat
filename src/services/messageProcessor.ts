@@ -286,6 +286,29 @@ export function matchMessage(record: MessageRecord, query: ClientQuery, threshol
   return matchers.some((matcher) => matcher(record));
 }
 
+/**
+ * Corte forte (v2, nivel 1): decide se UMA LINHA do log bruto menciona o
+ * cliente. Reusa exatamente os mesmos matchers por campo do matchMessage
+ * (logica UNION) — nome, CNPJ, email, telefone, link/@usuario. Usado pelo
+ * filtro linha-a-linha do log bruto (reportService) para descartar linhas de
+ * protocolo de OUTROS clientes, mantendo so a historia do cliente pesquisado.
+ */
+export function lineMatchesClient(line: string, query: ClientQuery, threshold = 0.7): boolean {
+  const raw = line;
+  const normalized = normalizeText(raw);
+  const digits = digitsOnly(raw);
+
+  if (query.link) {
+    const linkTerms = buildLinkTerms(query.link);
+    if (linkTerms && matchByLink(raw, linkTerms)) return true;
+  }
+  if (query.name && matchByName(normalized, raw, query.name, threshold)) return true;
+  if (query.cnpj && matchByCnpj(digits, query.cnpj)) return true;
+  if (query.email && matchByEmail(normalized, query.email)) return true;
+  if (query.phone && matchByPhone(digits, query.phone)) return true;
+  return false;
+}
+
 function buildTopics(records: MessageRecord[], limit = 10) {
   const counts = new Map<string, number>();
 

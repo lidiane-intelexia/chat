@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { sanitizeMessages, buildReportData } from './messageProcessor.js';
+import { sanitizeMessages, buildReportData, lineMatchesClient } from './messageProcessor.js';
 import type { MessageRecord } from './chatService.js';
 
 /**
@@ -13,6 +13,32 @@ function rec(text: string | null, createTime = '2026-01-01T09:00:00Z', name = 's
     message: { name, text, createTime, sender: { name: 'users/1', displayName: 'Fulano' } }
   };
 }
+
+describe('lineMatchesClient — match por linha (corte forte)', () => {
+  it('casa por nome do cliente na linha', () => {
+    expect(
+      lineMatchesClient('Cod.: FEN588SP | Cliente: FENIX ASSESSORIA CONTABIL | Protocolo: 1', { name: 'Fenix' })
+    ).toBe(true);
+  });
+
+  it('casa por CNPJ (apenas digitos)', () => {
+    expect(lineMatchesClient('- CNPJ/CPF: 29.280.197/0001-41', { cnpj: '29.280.197/0001-41' })).toBe(true);
+  });
+
+  it('casa por @usuario extraido do link', () => {
+    expect(
+      lineMatchesClient('subir post de @fenixcontabilidadesl', {
+        link: 'https://www.instagram.com/fenixcontabilidadesl/'
+      })
+    ).toBe(true);
+  });
+
+  it('NAO casa linha de outro cliente', () => {
+    expect(
+      lineMatchesClient('Cod.: EXE403ES | Cliente: EXECUTA CONTABILIDADE | Protocolo: 2', { name: 'Fenix' })
+    ).toBe(false);
+  });
+});
 
 describe('sanitizeMessages — dropTestOnly', () => {
   it('descarta mensagem que e exatamente "Teste"', () => {

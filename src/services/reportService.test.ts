@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { shouldOmitSection, cleanRawLog } from './reportService.js';
+import { shouldOmitSection, cleanRawLog, filterRawLogStrong } from './reportService.js';
 
 describe('shouldOmitSection — omitir secoes descritivas vazias (v2 secao 4.5)', () => {
   // Descritivas: somem quando vazias.
@@ -78,5 +78,67 @@ describe('cleanRawLog — limpa o log bruto inline (v2 opcao B)', () => {
 
   it('log vazio -> vazio', () => {
     expect(cleanRawLog('')).toBe('');
+  });
+});
+
+describe('filterRawLogStrong — corte forte por cliente (v2 nivel 1)', () => {
+  it('mantem a linha de cabecalho [data] [remetente]:', () => {
+    const input = '[21/11/2025 08:10:46] [Lidiane]: Bom dia';
+    expect(filterRawLogStrong(input, { name: 'Fenix' })).toBe(input);
+  });
+
+  it('descarta protocolo de OUTRO cliente e mantem o do cliente-alvo (por nome)', () => {
+    const input =
+      'Cod.: FEN588SP | Cliente: FENIX ASSESSORIA CONTABIL | Protocolo: 100916.2420c2\n' +
+      'Cod.: EXE403ES | Cliente: EXECUTA CONTABILIDADE | Protocolo: 251112.100414';
+    expect(filterRawLogStrong(input, { name: 'Fenix' })).toBe(
+      'Cod.: FEN588SP | Cliente: FENIX ASSESSORIA CONTABIL | Protocolo: 100916.2420c2'
+    );
+  });
+
+  it('mantem item de lista que casa por CNPJ e descarta os demais', () => {
+    const input =
+      '- Protocolo: Cod.: X | 29.280.197/0001-41 | Protocolo: 1\n' +
+      '- Protocolo: Cod.: Y | 11.111.111/0001-11 | Protocolo: 2';
+    expect(filterRawLogStrong(input, { cnpj: '29.280.197/0001-41' })).toBe(
+      '- Protocolo: Cod.: X | 29.280.197/0001-41 | Protocolo: 1'
+    );
+  });
+
+  it('nas listas de tarefas com bullet, mantem so a do cliente', () => {
+    const input =
+      '• *Criacao de Imagens* — _FENIX CONTABILIDADE_ · em atraso\n' +
+      '• *Edicao de Video* — _REVICONT REVISORA CONTABIL_ · em atraso';
+    expect(filterRawLogStrong(input, { name: 'Fenix' })).toBe(
+      '• *Criacao de Imagens* — _FENIX CONTABILIDADE_ · em atraso'
+    );
+  });
+
+  it('mantem conversa humana (prosa) mesmo sem citar o cliente', () => {
+    const input = 'Ontem eu criei o planejamento\nSolicito para que de sequencia a eles.';
+    expect(filterRawLogStrong(input, { name: 'ZZZZZ' })).toBe(input);
+  });
+
+  it('mantem o bloco "Log de Publicacoes" inteiro (campos com "-" nao sao dump)', () => {
+    const input =
+      '[04/03/2026 10:29:23] [Log de Publicacoes Busca Post - Automatica]: \n' +
+      '- CLIENTE: FENIX CONTABILIDADE LTDA\n' +
+      '- CNPJ/CPF: 29.280.197/0001-41\n' +
+      '- ID do BD: 47615\n' +
+      'Link da publicacao: https://www.instagram.com/p/DVdtdZgipXk/';
+    expect(filterRawLogStrong(input, { name: 'Fenix' })).toBe(input);
+  });
+
+  it('casa item de lista por @usuario do link', () => {
+    const input =
+      '• Post do cliente @fenixcontabilidadesl atrasado | Protocolo: 1\n' +
+      '• Post do cliente @outro atrasado | Protocolo: 2';
+    expect(filterRawLogStrong(input, { link: 'https://www.instagram.com/fenixcontabilidadesl/' })).toBe(
+      '• Post do cliente @fenixcontabilidadesl atrasado | Protocolo: 1'
+    );
+  });
+
+  it('log vazio -> vazio', () => {
+    expect(filterRawLogStrong('', { name: 'Fenix' })).toBe('');
   });
 });
