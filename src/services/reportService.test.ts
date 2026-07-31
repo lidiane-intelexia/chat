@@ -92,7 +92,8 @@ describe('filterRawLogStrong — corte forte por cliente (v2 nivel 1)', () => {
       'Cod.: FEN588SP | Cliente: FENIX ASSESSORIA CONTABIL | Protocolo: 100916.2420c2\n' +
       'Cod.: EXE403ES | Cliente: EXECUTA CONTABILIDADE | Protocolo: 251112.100414';
     expect(filterRawLogStrong(input, { name: 'Fenix' })).toBe(
-      'Cod.: FEN588SP | Cliente: FENIX ASSESSORIA CONTABIL | Protocolo: 100916.2420c2'
+      'Cod.: FEN588SP | Cliente: FENIX ASSESSORIA CONTABIL | Protocolo: 100916.2420c2\n' +
+        '(... +1 linha de outro cliente omitida)'
     );
   });
 
@@ -101,7 +102,8 @@ describe('filterRawLogStrong — corte forte por cliente (v2 nivel 1)', () => {
       '- Protocolo: Cod.: X | 29.280.197/0001-41 | Protocolo: 1\n' +
       '- Protocolo: Cod.: Y | 11.111.111/0001-11 | Protocolo: 2';
     expect(filterRawLogStrong(input, { cnpj: '29.280.197/0001-41' })).toBe(
-      '- Protocolo: Cod.: X | 29.280.197/0001-41 | Protocolo: 1'
+      '- Protocolo: Cod.: X | 29.280.197/0001-41 | Protocolo: 1\n' +
+        '(... +1 linha de outro cliente omitida)'
     );
   });
 
@@ -110,7 +112,8 @@ describe('filterRawLogStrong — corte forte por cliente (v2 nivel 1)', () => {
       '• *Criacao de Imagens* — _FENIX CONTABILIDADE_ · em atraso\n' +
       '• *Edicao de Video* — _REVICONT REVISORA CONTABIL_ · em atraso';
     expect(filterRawLogStrong(input, { name: 'Fenix' })).toBe(
-      '• *Criacao de Imagens* — _FENIX CONTABILIDADE_ · em atraso'
+      '• *Criacao de Imagens* — _FENIX CONTABILIDADE_ · em atraso\n' +
+        '(... +1 linha de outro cliente omitida)'
     );
   });
 
@@ -134,11 +137,65 @@ describe('filterRawLogStrong — corte forte por cliente (v2 nivel 1)', () => {
       '• Post do cliente @fenixcontabilidadesl atrasado | Protocolo: 1\n' +
       '• Post do cliente @outro atrasado | Protocolo: 2';
     expect(filterRawLogStrong(input, { link: 'https://www.instagram.com/fenixcontabilidadesl/' })).toBe(
-      '• Post do cliente @fenixcontabilidadesl atrasado | Protocolo: 1'
+      '• Post do cliente @fenixcontabilidadesl atrasado | Protocolo: 1\n' +
+        '(... +1 linha de outro cliente omitida)'
     );
   });
 
   it('log vazio -> vazio', () => {
     expect(filterRawLogStrong('', { name: 'Fenix' })).toBe('');
+  });
+
+  it('anti-orfao: remove bloco de bot INTEIRO quando nao cita o cliente', () => {
+    const input =
+      '[13/02/2026 14:05:02] [Atrasados Time Caio - Automatica]: Atencao, chamados atrasados:\n' +
+      '• Cod.: OUT | Cliente: OUTRO CLIENTE | Protocolo: 9';
+    expect(filterRawLogStrong(input, { name: 'Cescon' })).toBe('');
+  });
+
+  it('mantem bloco de bot que cita o cliente (so a linha dele)', () => {
+    const input =
+      '[12/02/2026 16:29:20] [Atrasados Time Caio - Automatica]: Atencao:\n' +
+      '• Cod.: RIC624GO | Cliente: CESCON GESTAO CONTABIL | Protocolo: 1\n' +
+      '• Cod.: OUT | Cliente: OUTRO | Protocolo: 2';
+    expect(filterRawLogStrong(input, { name: 'Cescon' })).toBe(
+      '[12/02/2026 16:29:20] [Atrasados Time Caio - Automatica]: Atencao:\n' +
+        '• Cod.: RIC624GO | Cliente: CESCON GESTAO CONTABIL | Protocolo: 1\n' +
+        '(... +1 linha de outro cliente omitida)'
+    );
+  });
+
+  it('preserva conversa humana mesmo sem citar o cliente (nao e orfao)', () => {
+    const input = '[16/03/2026 09:42:18] [Lidiane de Souza Mendes]: Sim, ja fiz isso ontem.';
+    expect(filterRawLogStrong(input, { name: 'Cescon' })).toBe(input);
+  });
+
+  it('bloco-lista de nomes: mantem cabecalho + so a linha do cliente', () => {
+    const names = [
+      'ADCON ADM CONTABIL',
+      'AGILIZA',
+      'ALBATROZ CONTABIL',
+      'NET WORTH',
+      'Grupo DPG',
+      'CESCON GESTAO CONTABIL',
+      'FENIX CONTABILIDADE',
+      'SOMUS CONTABILIDADE',
+      'PETLOVE'
+    ];
+    const input =
+      '[16/04/2026 14:52:24] [Bruno Maurus]: Algum desses clientes esta ativo em midias\n' + names.join('\n');
+    expect(filterRawLogStrong(input, { name: 'Cescon' })).toBe(
+      '[16/04/2026 14:52:24] [Bruno Maurus]: Algum desses clientes esta ativo em midias\n' +
+        'CESCON GESTAO CONTABIL\n' +
+        '(... +8 linhas de outros clientes omitidas)'
+    );
+  });
+
+  it('NAO trata conversa humana curta (poucos nomes) como roster', () => {
+    const input =
+      '[20/04/2026 14:31:57] [Lidiane de Souza Mendes]: Rafa\n' +
+      'O post da Cescon de hoje:\n' +
+      'Instagram';
+    expect(filterRawLogStrong(input, { name: 'Cescon' })).toBe(input);
   });
 });

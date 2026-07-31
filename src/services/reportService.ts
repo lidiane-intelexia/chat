@@ -608,39 +608,107 @@ export function cleanRawLog(rawLog: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// v2 (corte forte, nivel 1): filtra o log bruto INLINE por linha, mantendo so
-// as linhas ligadas ao cliente pesquisado. O ruido intra-mensagem sao os
-// despejos "Seguem protocolos em atraso" e as notificacoes "- Automatica" —
-// UMA mensagem com centenas de linhas de OUTROS clientes. Regra determinística:
-//   - cabecalho ([data] [remetente]:)      -> mantem (estrutura da timeline)
-//   - linha que NAO e item de lista (prosa/
-//     conversa humana / campos "- CLIENTE"/
-//     "Link da publicacao")                -> mantem
-//   - item de lista (contem "Protocolo:" ou
-//     comeca com bullet "•")               -> mantem SO se casar o cliente
-// Assim some o dump de outros clientes e sobra a historia real do cliente.
-// Matching centralizado em lineMatchesClient (messageProcessor), nunca no prompt.
+// v2 (corte forte): filtra o log bruto INLINE, mantendo so o que e do cliente
+// pesquisado. Trabalha por BLOCO (mensagem = cabecalho + linhas ate o proximo
+// cabecalho), de forma deterministica (matching em lineMatchesClient, nunca no
+// prompt):
+//   - Bloco que menciona o cliente em alguma linha -> mantem cabecalho + prosa;
+//     das linhas de LISTA (protocolo/bullet) ou de ROSTER (lista de nomes de
+//     clientes) mantem SO as que casam o cliente. Some o dump de outros clientes.
+//   - Bloco AUTOMATICO ("- Automatica") que NAO menciona o cliente em lugar
+//     nenhum -> remove o bloco INTEIRO (anti-orfao). Sao digests que vazaram por
+//     casar espaco/remetente e so deixariam um cabecalho vazio ("Atencao, os
+//     seguintes chamados estao Atrasados:") sem nada do cliente embaixo.
+//   - Conversa humana sem citar o cliente -> preserva (pode ser contexto).
 // ---------------------------------------------------------------------------
+const ROSTER_MIN = 8; // n. de nomes crus para considerar o bloco um "roster"
+
 function isRawHeaderLine(line: string): boolean {
   return /^\[[^\]]+\]\s*\[[^\]]+\]\s*:/.test(line);
 }
 
+function senderOf(header: string): string {
+  const m = header.match(/^\[[^\]]+\]\s*\[([^\]]+)\]\s*:/);
+  return m?.[1]?.trim() ?? '';
+}
+
+function headerTextOf(header: string): string {
+  const m = header.match(/^\[[^\]]+\]\s*\[[^\]]+\]\s*:\s*(.*)$/);
+  return m?.[1] ?? '';
+}
+
+function isBotSender(sender: string): boolean {
+  return /automatica/i.test(sender);
+}
+
+// Linha de lista: protocolo ou bullet. Ruido claro quando nao e do cliente.
 function isListEntryLine(line: string): boolean {
   const trimmed = line.trim();
   return /protocolo\s*:/i.test(trimmed) || trimmed.startsWith('•');
 }
 
+// Linha de "roster": nome de empresa cru (curto, sem ":" nem pontuacao final,
+// sem URL). Sozinha parece prosa; so vira ruido quando aparece em massa (>= N).
+function isBareEntityLine(line: string): boolean {
+  const t = line.trim();
+  if (t.length === 0 || t.length > 60) return false;
+  if (t.includes(':') || t.includes('://')) return false;
+  if (t.startsWith('•') || t.startsWith('-')) return false;
+  if (/[?.!]$/.test(t)) return false;
+  return /^[A-Za-z0-9]/.test(t);
+}
+
 export function filterRawLogStrong(rawLog: string, query: ClientQuery): string {
-  const kept: string[] = [];
-  for (const line of rawLog.split('\n')) {
-    if (isRawHeaderLine(line) || !isListEntryLine(line)) {
-      kept.push(line);
-      continue;
+  const lines = rawLog.split('\n');
+  const out: string[] = [];
+
+  let i = 0;
+  while (i < lines.length) {
+    const first = lines[i] ?? '';
+    const header = isRawHeaderLine(first) ? first : null;
+    const body: string[] = [];
+    let j = header ? i + 1 : i;
+    while (j < lines.length) {
+      const next = lines[j] ?? '';
+      if (isRawHeaderLine(next)) break;
+      body.push(next);
+      j++;
     }
-    // Item de lista: so entra se mencionar o cliente pesquisado.
-    if (lineMatchesClient(line, query)) kept.push(line);
+    i = j;
+
+    const blockHasClient =
+      (header ? lineMatchesClient(headerTextOf(header), query) : false) ||
+      body.some((l) => lineMatchesClient(l, query));
+
+    if (blockHasClient) {
+      if (header) out.push(header);
+      const blockIsRoster = body.filter(isBareEntityLine).length >= ROSTER_MIN;
+      let dropped = 0;
+      for (const line of body) {
+        const isEnum = isListEntryLine(line) || (blockIsRoster && isBareEntityLine(line));
+        if (!isEnum || lineMatchesClient(line, query)) {
+          out.push(line);
+        } else {
+          dropped++;
+        }
+      }
+      // Transparencia: sinaliza que o bloco tinha MAIS itens (de outros clientes)
+      // cortados, para nao dar a impressao de que so o cliente aparecia na lista.
+      if (dropped === 1) {
+        out.push('(... +1 linha de outro cliente omitida)');
+      } else if (dropped > 1) {
+        out.push(`(... +${dropped} linhas de outros clientes omitidas)`);
+      }
+    } else if (header && isBotSender(senderOf(header))) {
+      // Anti-orfao: bloco automatico sem mencao ao cliente = ruido. Remove tudo.
+    } else {
+      // Conversa humana (ou bloco sem cabecalho): preserva integralmente.
+      if (header) out.push(header);
+      for (const line of body) out.push(line);
+    }
   }
-  return kept.join('\n');
+
+  return out.join('\n');
 }
 
 function buildHtml(text: string, report: ReportData, query: ClientQuery): string {
