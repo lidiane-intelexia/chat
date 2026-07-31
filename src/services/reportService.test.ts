@@ -1,10 +1,20 @@
 import { describe, it, expect } from 'vitest';
 
-import { shouldOmitSection, filterTimelineByClient } from './reportService.js';
-import type { TimelineEntry } from './messageProcessor.js';
+import { shouldOmitSection, filterRecordsByClient } from './reportService.js';
+import type { MessageRecord } from './chatService.js';
 
-function te(sender: string, text: string): TimelineEntry {
-  return { time: '2026-01-01T09:00:00Z', sender, space: 'Espaco Cliente', text };
+// MessageRecord minimo. `type` ('HUMAN' | 'BOT') controla a classificacao de bot
+// do corte forte: bot que nao cita o cliente e descartado; humano e preservado.
+function rec(text: string, type: 'HUMAN' | 'BOT' = 'HUMAN'): MessageRecord {
+  return {
+    space: { name: 'spaces/AAA', displayName: 'Espaco Cliente' },
+    message: {
+      name: 'spaces/AAA/messages/1',
+      text,
+      createTime: '2026-01-01T09:00:00Z',
+      sender: { name: 'users/1', displayName: 'Fulano', type }
+    }
+  };
 }
 
 describe('shouldOmitSection — omitir secoes descritivas vazias (v2 secao 4.5)', () => {
@@ -47,31 +57,34 @@ describe('shouldOmitSection — omitir secoes descritivas vazias (v2 secao 4.5)'
   });
 });
 
-describe('filterTimelineByClient — corte forte NA FONTE (IA + PDF)', () => {
-  it('descarta mensagem automatica que nao cita o cliente', () => {
-    const tl = [
-      te('Atrasados Time Caio - Automatica', 'Atencao, chamados atrasados:\n• Cod.: OUT | Cliente: OUTRO | Protocolo: 9')
-    ];
-    expect(filterTimelineByClient(tl, { name: 'Cescon' })).toEqual([]);
+describe('filterRecordsByClient — corte forte NA FONTE (IA + PDF)', () => {
+  it('descarta mensagem de BOT que nao cita o cliente', () => {
+    const recs = [rec('Atencao, chamados atrasados:\n• Cod.: OUT | Cliente: OUTRO | Protocolo: 9', 'BOT')];
+    expect(filterRecordsByClient(recs, { name: 'Cescon' })).toEqual([]);
   });
 
-  it('preserva conversa humana sem citar o cliente (contexto)', () => {
-    const tl = [te('Lidiane de Souza Mendes', 'Sim, ja fiz isso ontem.')];
-    expect(filterTimelineByClient(tl, { name: 'Cescon' })).toEqual(tl);
+  it('preserva conversa HUMANA sem citar o cliente (contexto)', () => {
+    const recs = [rec('Sim, ja fiz isso ontem.', 'HUMAN')];
+    expect(filterRecordsByClient(recs, { name: 'Cescon' })).toEqual(recs);
+  });
+
+  it('mensagem HUMANA sem nome resolvido (tipo HUMAN) NAO e tratada como bot', () => {
+    // Mesmo que caia no rotulo "<grupo> - Automatica", o tipo HUMAN a preserva.
+    const recs = [rec('nós temos acesso a essa página?', 'HUMAN')];
+    expect(filterRecordsByClient(recs, { name: 'Cescon' })).toEqual(recs);
   });
 
   it('num despejo, mantem so a linha do cliente + marcador', () => {
-    const tl = [
-      te(
-        'Lidiane de Souza Mendes',
+    const recs = [
+      rec(
         'Seguem protocolos:\n' +
           'Cod.: RIC624GO | Cliente: CESCON GESTAO CONTABIL | Protocolo: 1\n' +
           'Cod.: X | Cliente: OUTRO | Protocolo: 2'
       )
     ];
-    const out = filterTimelineByClient(tl, { name: 'Cescon' });
+    const out = filterRecordsByClient(recs, { name: 'Cescon' });
     expect(out).toHaveLength(1);
-    expect(out[0]!.text).toBe(
+    expect(out[0]!.message.text).toBe(
       'Seguem protocolos:\n' +
         'Cod.: RIC624GO | Cliente: CESCON GESTAO CONTABIL | Protocolo: 1\n' +
         '(... +1 linha de outro cliente omitida)'
@@ -80,13 +93,10 @@ describe('filterTimelineByClient — corte forte NA FONTE (IA + PDF)', () => {
 
   it('deduplica protocolo do cliente repetido entre mensagens; a 2a vira casca e cai', () => {
     const linha = '• Cod.: RIC624GO | Cliente: CESCON GESTAO CONTABIL | Protocolo: 012713';
-    const tl = [
-      te('Atrasados Time Caio - Automatica', 'Atencao:\n' + linha),
-      te('Atrasados Time Caio - Automatica', 'Atencao:\n' + linha)
-    ];
-    const out = filterTimelineByClient(tl, { name: 'Cescon' });
+    const recs = [rec('Atencao:\n' + linha, 'BOT'), rec('Atencao:\n' + linha, 'BOT')];
+    const out = filterRecordsByClient(recs, { name: 'Cescon' });
     expect(out).toHaveLength(1);
-    expect(out[0]!.text).toContain('RIC624GO');
+    expect(out[0]!.message.text).toContain('RIC624GO');
   });
 
   it('bloco-lista de nomes (roster): mantem so a linha do cliente + marcador', () => {
@@ -101,9 +111,9 @@ describe('filterTimelineByClient — corte forte NA FONTE (IA + PDF)', () => {
       'SOMUS CONTABILIDADE',
       'PETLOVE'
     ];
-    const tl = [te('Bruno Maurus', 'Algum desses clientes esta ativo em midias?\n' + nomes.join('\n'))];
-    const out = filterTimelineByClient(tl, { name: 'Cescon' });
-    expect(out[0]!.text).toBe(
+    const recs = [rec('Algum desses clientes esta ativo em midias?\n' + nomes.join('\n'))];
+    const out = filterRecordsByClient(recs, { name: 'Cescon' });
+    expect(out[0]!.message.text).toBe(
       'Algum desses clientes esta ativo em midias?\n' +
         'CESCON GESTAO CONTABIL\n' +
         '(... +8 linhas de outros clientes omitidas)'
@@ -111,37 +121,36 @@ describe('filterTimelineByClient — corte forte NA FONTE (IA + PDF)', () => {
   });
 
   it('conversa humana curta com nomes soltos nao vira roster', () => {
-    const tl = [te('Lidiane de Souza Mendes', 'Rafa\nO post da Cescon de hoje:\nInstagram')];
-    const out = filterTimelineByClient(tl, { name: 'Cescon' });
-    expect(out[0]!.text).toBe('Rafa\nO post da Cescon de hoje:\nInstagram');
+    const recs = [rec('Rafa\nO post da Cescon de hoje:\nInstagram')];
+    const out = filterRecordsByClient(recs, { name: 'Cescon' });
+    expect(out[0]!.message.text).toBe('Rafa\nO post da Cescon de hoje:\nInstagram');
   });
 
   it('remove linha "Teste" isolada da mensagem', () => {
-    const tl = [te('Lidiane de Souza Mendes', 'Cod.: RIC624GO | Cliente: CESCON | Protocolo: 1\nTeste')];
-    const out = filterTimelineByClient(tl, { name: 'Cescon' });
-    expect(out[0]!.text).toBe('Cod.: RIC624GO | Cliente: CESCON | Protocolo: 1');
+    const recs = [rec('Cod.: RIC624GO | Cliente: CESCON | Protocolo: 1\nTeste')];
+    const out = filterRecordsByClient(recs, { name: 'Cescon' });
+    expect(out[0]!.message.text).toBe('Cod.: RIC624GO | Cliente: CESCON | Protocolo: 1');
   });
 
   it('casa a mensagem por CNPJ', () => {
-    const tl = [te('Lidiane de Souza Mendes', '23.624.458/0001-17')];
-    expect(filterTimelineByClient(tl, { cnpj: '23.624.458/0001-17' })).toHaveLength(1);
+    const recs = [rec('23.624.458/0001-17')];
+    expect(filterRecordsByClient(recs, { cnpj: '23.624.458/0001-17' })).toHaveLength(1);
   });
 
   it('casa item de lista por @usuario do link', () => {
-    const tl = [
-      te(
-        'Lidiane de Souza Mendes',
+    const recs = [
+      rec(
         '• Post do cliente @fenixcontabilidadesl atrasado | Protocolo: 1\n' +
           '• Post do cliente @outro atrasado | Protocolo: 2'
       )
     ];
-    const out = filterTimelineByClient(tl, { link: 'https://www.instagram.com/fenixcontabilidadesl/' });
-    expect(out[0]!.text).toBe(
+    const out = filterRecordsByClient(recs, { link: 'https://www.instagram.com/fenixcontabilidadesl/' });
+    expect(out[0]!.message.text).toBe(
       '• Post do cliente @fenixcontabilidadesl atrasado | Protocolo: 1\n' + '(... +1 linha de outro cliente omitida)'
     );
   });
 
-  it('timeline vazia -> vazia', () => {
-    expect(filterTimelineByClient([], { name: 'Cescon' })).toEqual([]);
+  it('lista vazia -> vazia', () => {
+    expect(filterRecordsByClient([], { name: 'Cescon' })).toEqual([]);
   });
 });

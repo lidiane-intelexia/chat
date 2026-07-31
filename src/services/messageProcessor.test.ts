@@ -166,3 +166,47 @@ describe('integracao leve — sanitize reduz a timeline', () => {
     expect(limpo.timeline.length).toBe(2);
   });
 });
+
+describe('buildReportData — rotulo do remetente sem nome, por tipo (HUMAN/BOT)', () => {
+  it('sem nome + tipo HUMAN -> "<grupo> - nao identificado" (nao mente "Automatica")', () => {
+    const r: MessageRecord = {
+      space: { name: 'spaces/AAA', displayName: 'Atendimento + Midias' },
+      message: {
+        name: 'spaces/AAA/messages/1',
+        text: 'nós temos acesso a essa página?',
+        createTime: '2026-01-01T09:00:00Z',
+        sender: { name: 'users/9', type: 'HUMAN' }
+      }
+    };
+    const report = buildReportData([r], { name: 'Cescon' });
+    expect(report.timeline[0]!.sender).toBe('Atendimento + Midias - nao identificado');
+  });
+
+  it('sem nome + tipo BOT -> "<grupo> - Automatica"', () => {
+    const r: MessageRecord = {
+      space: { name: 'spaces/AAA', displayName: 'App.BuscaPost' },
+      message: {
+        name: 'spaces/AAA/messages/2',
+        text: 'Falha ao publicar post agendado',
+        createTime: '2026-01-01T09:00:00Z',
+        sender: { name: 'users/app', type: 'BOT' }
+      }
+    };
+    const report = buildReportData([r], { name: 'Cescon' });
+    expect(report.timeline[0]!.sender).toBe('App.BuscaPost - Automatica');
+  });
+
+  it('com displayName resolvido -> usa o nome real (sem fallback)', () => {
+    const r: MessageRecord = {
+      space: { name: 'spaces/AAA', displayName: 'Atendimento + Midias' },
+      message: {
+        name: 'spaces/AAA/messages/3',
+        text: 'ok',
+        createTime: '2026-01-01T09:00:00Z',
+        sender: { name: 'users/3', displayName: 'Lidiane', type: 'HUMAN' }
+      }
+    };
+    const report = buildReportData([r], { name: 'Cescon' });
+    expect(report.timeline[0]!.sender).toBe('Lidiane');
+  });
+});

@@ -439,15 +439,22 @@ export function buildReportData(records: MessageRecord[], query: ClientQuery, na
     const spaceName = record.space.displayName
       || nameMap?.get(record.space.name || '')
       || '';
+    const senderType = record.message.sender?.type;
     let sender = record.message.sender?.displayName
       || nameMap?.get(senderId)
       || '';
 
-    // If sender is unknown, attribute to the space/group as automated message
+    // Remetente sem nome resolvido: usa o TIPO real (HUMAN/BOT) da API do Chat.
+    // - BOT (ou tipo ausente): automacao -> "<grupo> - Automatica".
+    // - HUMAN: e uma PESSOA cujo nome nao resolvemos (a API do Chat manda so o ID
+    //   e o People API nao achou). Nao mentir chamando de "Automatica": marca como
+    //   participante nao identificado do grupo.
     if (!sender || sender === 'Desconhecido') {
-      sender = spaceName
-        ? `${spaceName} - Automatica`
-        : 'Sistema - Automatica';
+      if (senderType === 'HUMAN') {
+        sender = spaceName ? `${spaceName} - nao identificado` : 'Participante nao identificado';
+      } else {
+        sender = spaceName ? `${spaceName} - Automatica` : 'Sistema - Automatica';
+      }
     }
     participants.add(sender);
 

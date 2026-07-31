@@ -61,6 +61,19 @@
 > Efeito: IA so ve o cliente -> CRONOGRAMA limpo/estavel, custo cai, cascas somem. 10 testes de
 > filterTimelineByClient (total 75).
 
+> **FILTRO NOS RECORDS + REMETENTE POR TIPO (2026-07-31):** `filterTimelineByClient` (so a timeline)
+> virou `filterRecordsByClient` (MessageRecord[]), aplicado ANTES de `buildReportData`. Motivo: os
+> PRAZOS (`report.deadlines`) eram extraidos dos despejos crus e vazavam 2 outros clientes (ALBATROZ,
+> OLFIR ROGEDO) no CRONOGRAMA via secao "Prazos". Filtrando na origem (records), tudo — timeline,
+> deadlines, decisoes, pendencias — nasce so com o cliente. Bonus: a checagem de bot agora usa o TIPO
+> real do remetente (`sender.type === 'BOT'`) em vez do rotulo `/automatica/` — assim uma mensagem
+> HUMANA cujo nome nao resolveu (e cai no fallback "<grupo> - Automatica") nunca e descartada como bot.
+> E o rotulo do remetente sem nome passou a respeitar o tipo: HUMAN -> "<grupo> - nao identificado"
+> (nao mais o enganoso "- Automatica"); BOT/ausente -> "<grupo> - Automatica". O nome real NAO vem no
+> payload da mensagem do Chat (so o ID) e o People API nao resolve ex-funcionario/externo — para trazer
+> nomes reais seria preciso `spaces.members.list` por espaco (follow-up, precisa validar com dado real).
+> Total 79 testes.
+
 - **Status original:** draft-r2 (revisada em party mode pre-lock 2026-07-08 — Winston/Amelia/Mary)
 - **Owner:** processos@grupodpg.com.br (Lidy)
 - **Branch sugerida:** `feat/relatorio-v2-classificacao`
