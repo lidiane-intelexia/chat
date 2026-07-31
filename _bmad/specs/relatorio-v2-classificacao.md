@@ -21,6 +21,17 @@
 > Aplicado no PDF: `cleanRawLog(filterRawLogStrong(rawLogContent, query))`. Reduz PAGINAS (nao o
 > custo da IA — a entrada do Gemini segue completa). 12 testes novos, npm run check verde.
 
+> **CORTE FORTE — refino ciente de bloco (2026-07-31):** o corte por linha deixava dois residuos
+> vistos no PDF real: (a) CABECALHOS ORFAOS — mensagens automaticas ("- Automatica") que casaram
+> por espaco/remetente e, sem linha do cliente, sobravam como titulo vazio ("Atencao, os seguintes
+> chamados estao Atrasados:"); (b) BLOCO-LISTA de nomes crus de clientes (ex.: "Algum desses
+> clientes esta ativo em midias?" com ~90 nomes) que passavam como prosa. `filterRawLogStrong` foi
+> reescrito para trabalhar por BLOCO (mensagem = cabecalho + linhas ate o proximo cabecalho): bloco
+> que cita o cliente -> mantem cabecalho + prosa e, das linhas de lista/roster, so as do cliente;
+> bloco AUTOMATICO sem citar o cliente -> removido INTEIRO (anti-orfao); conversa humana sem citar
+> o cliente -> preservada. Roster detectado por massa de linhas de nome cru (>= 8, curtas, sem ":"
+> nem pontuacao final). +5 testes (total 84), npm run check verde.
+
 - **Status original:** draft-r2 (revisada em party mode pre-lock 2026-07-08 — Winston/Amelia/Mary)
 - **Owner:** processos@grupodpg.com.br (Lidy)
 - **Branch sugerida:** `feat/relatorio-v2-classificacao`

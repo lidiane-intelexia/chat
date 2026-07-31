@@ -141,4 +141,54 @@ describe('filterRawLogStrong — corte forte por cliente (v2 nivel 1)', () => {
   it('log vazio -> vazio', () => {
     expect(filterRawLogStrong('', { name: 'Fenix' })).toBe('');
   });
+
+  it('anti-orfao: remove bloco de bot INTEIRO quando nao cita o cliente', () => {
+    const input =
+      '[13/02/2026 14:05:02] [Atrasados Time Caio - Automatica]: Atencao, chamados atrasados:\n' +
+      '• Cod.: OUT | Cliente: OUTRO CLIENTE | Protocolo: 9';
+    expect(filterRawLogStrong(input, { name: 'Cescon' })).toBe('');
+  });
+
+  it('mantem bloco de bot que cita o cliente (so a linha dele)', () => {
+    const input =
+      '[12/02/2026 16:29:20] [Atrasados Time Caio - Automatica]: Atencao:\n' +
+      '• Cod.: RIC624GO | Cliente: CESCON GESTAO CONTABIL | Protocolo: 1\n' +
+      '• Cod.: OUT | Cliente: OUTRO | Protocolo: 2';
+    expect(filterRawLogStrong(input, { name: 'Cescon' })).toBe(
+      '[12/02/2026 16:29:20] [Atrasados Time Caio - Automatica]: Atencao:\n' +
+        '• Cod.: RIC624GO | Cliente: CESCON GESTAO CONTABIL | Protocolo: 1'
+    );
+  });
+
+  it('preserva conversa humana mesmo sem citar o cliente (nao e orfao)', () => {
+    const input = '[16/03/2026 09:42:18] [Lidiane de Souza Mendes]: Sim, ja fiz isso ontem.';
+    expect(filterRawLogStrong(input, { name: 'Cescon' })).toBe(input);
+  });
+
+  it('bloco-lista de nomes: mantem cabecalho + so a linha do cliente', () => {
+    const names = [
+      'ADCON ADM CONTABIL',
+      'AGILIZA',
+      'ALBATROZ CONTABIL',
+      'NET WORTH',
+      'Grupo DPG',
+      'CESCON GESTAO CONTABIL',
+      'FENIX CONTABILIDADE',
+      'SOMUS CONTABILIDADE',
+      'PETLOVE'
+    ];
+    const input =
+      '[16/04/2026 14:52:24] [Bruno Maurus]: Algum desses clientes esta ativo em midias\n' + names.join('\n');
+    expect(filterRawLogStrong(input, { name: 'Cescon' })).toBe(
+      '[16/04/2026 14:52:24] [Bruno Maurus]: Algum desses clientes esta ativo em midias\n' + 'CESCON GESTAO CONTABIL'
+    );
+  });
+
+  it('NAO trata conversa humana curta (poucos nomes) como roster', () => {
+    const input =
+      '[20/04/2026 14:31:57] [Lidiane de Souza Mendes]: Rafa\n' +
+      'O post da Cescon de hoje:\n' +
+      'Instagram';
+    expect(filterRawLogStrong(input, { name: 'Cescon' })).toBe(input);
+  });
 });
