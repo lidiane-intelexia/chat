@@ -1,6 +1,6 @@
 import puppeteer from 'puppeteer';
 import { buildReportData, sanitizeMessages } from './messageProcessor.js';
-import type { ClientQuery, ReportData, TimelineEntry } from './messageProcessor.js';
+import type { ClientQuery, ReportData } from './messageProcessor.js';
 import { lineMatchesClient } from './messageProcessor.js';
 import type { MessageRecord } from './chatService.js';
 import { analyzeWithAI, type AnalyzeOptions } from './aiService.js';
@@ -605,8 +605,12 @@ function isProtocolLine(normalized: string): boolean {
 // ---------------------------------------------------------------------------
 const ROSTER_MIN = 8; // n. de nomes crus para considerar a mensagem um "roster"
 
-function isBotSender(sender: string): boolean {
-  return /automatica/i.test(sender);
+// Bot de verdade: usa o TIPO do remetente da API do Chat ('BOT'), nao o rotulo de
+// texto. Assim uma mensagem HUMANA cujo nome nao resolveu (e cai no fallback
+// "<grupo> - Automatica") NUNCA e tratada como bot e descartada por engano.
+// Sem tipo -> conservador: trata como humano (nao dropa), para nao perder mensagem.
+function isBotRecord(record: MessageRecord): boolean {
+  return record.message.sender?.type === 'BOT';
 }
 
 // Linha de lista: protocolo ou bullet. Ruido claro quando nao e do cliente.
@@ -626,18 +630,18 @@ function isBareEntityLine(line: string): boolean {
   return /^[A-Za-z0-9]/.test(t);
 }
 
-export function filterTimelineByClient(timeline: TimelineEntry[], query: ClientQuery): TimelineEntry[] {
+export function filterRecordsByClient(records: MessageRecord[], query: ClientQuery): MessageRecord[] {
   const seenProtocols = new Set<string>();
-  const out: TimelineEntry[] = [];
+  const out: MessageRecord[] = [];
 
-  for (const entry of timeline) {
-    const lines = entry.text.split('\n');
+  for (const record of records) {
+    const lines = (record.message.text ?? '').split('\n');
     const mentions = lines.some((l) => lineMatchesClient(l, query));
 
     if (!mentions) {
       // Nao cita o cliente: bot = ruido -> descarta; humano = contexto -> mantem.
-      if (isBotSender(entry.sender)) continue;
-      out.push(entry);
+      if (isBotRecord(record)) continue;
+      out.push(record);
       continue;
     }
 
@@ -672,7 +676,7 @@ export function filterTimelineByClient(timeline: TimelineEntry[], query: ClientQ
     } else if (dropped > 1) {
       kept.push(`(... +${dropped} linhas de outros clientes omitidas)`);
     }
-    out.push({ ...entry, text: kept.join('\n') });
+    out.push({ ...record, message: { ...record.message, text: kept.join('\n') } });
   }
 
   return out;
@@ -724,7 +728,7 @@ function buildHtml(text: string, report: ReportData): string {
   }
 
   // Anexo bruto deterministico: montado da timeline JA FILTRADA na fonte
-  // (filterTimelineByClient), no mesmo formato de linha que buildReportText usa.
+  // (filterRecordsByClient), no mesmo formato de linha que buildReportText usa.
   const rawLogContent = report.timeline.length
     ? report.timeline
         .map((entry) => `[${formatDateTimePrecise(entry.time)}] [${entry.sender}]: ${entry.text}`)
@@ -803,17 +807,17 @@ export async function generateReport(
 ) {
   const { records: clean, stats } = sanitizeMessages(records);
   logger.info({ ...stats }, 'sanitizacao de mensagens do relatorio');
-  const report = buildReportData(clean, query, nameMap);
-  // Corte forte NA FONTE: filtra a timeline (Historico Consolidado) antes de ir
-  // para a IA e para o PDF. So o cliente pesquisado chega na analise.
-  const timelineBefore = report.timeline.length;
-  report.timeline = filterTimelineByClient(report.timeline, query);
+  // Corte forte NA FONTE: filtra os RECORDS (por tipo de remetente e por linha)
+  // ANTES de montar o relatorio. Assim timeline, prazos, decisoes e pendencias —
+  // tudo que vai para a IA (buildReportText) e para o PDF — nasce so com o cliente.
+  const filtered = filterRecordsByClient(clean, query);
   logger.info(
-    { timelineBefore, timelineAfter: report.timeline.length },
-    'corte forte da timeline (fonte da IA + PDF)'
+    { recordsBefore: clean.length, recordsAfter: filtered.length },
+    'corte forte dos records (fonte da IA + PDF)'
   );
+  const report = buildReportData(filtered, query, nameMap);
   const rawText = buildReportText(report);
-  const text = await analyzeWithAI(rawText, clean, analyzeOptions);
+  const text = await analyzeWithAI(rawText, filtered, analyzeOptions);
   const pdf = format === 'pdf' ? await renderPdf(text, report) : undefined;
 
   return { report, text, pdf } satisfies ReportOutput;
